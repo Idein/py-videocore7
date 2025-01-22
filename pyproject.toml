@@ -12,3 +12,59 @@ dependencies = []
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+lint.select = [
+    "F",  # pyflakes
+    "E",  # pycodestyle
+    "W",  # pycodestyle warnings
+    "I",  # isort
+    "D",  # pydocstyle
+    "UP", # pyupgrade
+    "N",  # pep8-naming
+]
+lint.ignore = ["F403", "F405", "D203", "D213"]
+line-length = 119
+exclude = [".venv", ".git", "__pycache__",]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 119
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "D"] # __init__.pyは未使用インポートとドキュメントを無視
+"tests/test_*.py" = ["D"] # テストファイルはドキュメントを無視
+"example/*.py" = ["D"] # exampleファイルはドキュメントを無視
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.2",
+]
+
+[tool.mypy]
+allow_redefinition = true
+allow_untyped_globals = false
+check_untyped_defs = true
+color_output = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_untyped_defs = true
+enable_incomplete_feature = "NewGenericSyntax"
+error_summary = true
+ignore_missing_imports = true
+implicit_reexport = true
+namespace_packages = true
+no_implicit_optional = true
+pretty = true
+show_column_numbers = true
+show_error_codes = true
+show_error_context = true
+show_traceback = true
+strict = true
+warn_no_return = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = false
