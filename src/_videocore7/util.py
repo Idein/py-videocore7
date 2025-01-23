@@ -19,5 +19,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import struct
+from collections.abc import Iterable
+from typing import Any
 
-__version__ = "0.0.0"
+
+def pack_unpack(pack: str | bytes, unpack: str | bytes, v: Any) -> Any:
+    if isinstance(v, Iterable):
+        return map(lambda x: pack_unpack(pack, unpack, x), v)
+    return struct.unpack(unpack, struct.pack(pack, v))[0]
