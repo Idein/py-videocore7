@@ -192,7 +192,7 @@ def boilerplate_binary_ops(
         unif[1] = x2.addresses()[0]
         unif[2] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0], thread=2)  # TODO: Why thread is required?
+        drv.execute(code, unif.addresses()[0])
 
         for ix, (bin_op, dst_op, src1_op, src2_op) in enumerate(cases):
             msg = f"{bin_op}({dst_op}, {src1_op}, {src2_op})"
@@ -362,7 +362,7 @@ def boilerplate_unary_ops(
         unif[0] = x.addresses()[0]
         unif[1] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0], thread=2)  # TODO: Why thread is required?
+        drv.execute(code, unif.addresses()[0])
 
         for ix, (uni_op, dst_op, src_op) in enumerate(cases):
             msg = f"{uni_op}({dst_op}, {src_op})"

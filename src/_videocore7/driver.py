@@ -141,8 +141,8 @@ class Dispatcher:
                 wg_y << 16,
                 wg_z << 16,
                 ((roundup(wgs_per_sg * wg_size, 16) - 1) << 12) | (wgs_per_sg << 8) | (wg_size & 0xFF),
-                # Number of batches minus 1
-                thread - 1,
+                # Number of batches
+                thread,
                 # Shader address, pnan, singleseg, threading
                 code.addresses()[0],
                 # Uniforms address
