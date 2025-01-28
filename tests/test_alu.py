@@ -71,8 +71,8 @@ ops: dict[str | None, Callable[..., Any]] = {
     "bxor": lambda a, b: a ^ b,
     "vadd": lambda a, b: a + b,
     "vsub": lambda a, b: a - b,
-    "rotquad": lambda a, b: np.hstack([np.roll(x, -int(y % 4)) for x, y in zip(a.reshape(4, 4), b[::4])]),
-    "rotfull": lambda a, b: np.roll(a, -int(b[0] % 16)),
+    "quad_rotate": lambda a, b: np.hstack([np.roll(x, -int(y % 4)) for x, y in zip(a.reshape(4, 4), b[::4])]),
+    "rotate": lambda a, b: np.roll(a, -int(b[0] % 16)),
     "shuffle": lambda a, b: a[b % 16],
     # unary ops
     "fmov": lambda x: x,
@@ -327,7 +327,7 @@ def test_binary_ops() -> None:
     )
 
     boilerplate_binary_ops(
-        ["rotquad", "rotfull", "shuffle"],
+        ["quad_rotate", "rotate", "shuffle"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),

@@ -257,29 +257,14 @@ class WriteSignal:
         return Signal(self.name, dst=dst)
 
 
-class RotateSignal:
-    name: str
-
-    def __init__(self: Self, name: str) -> None:
-        self.name = name
-
-    def __call__(self: Self, rot: int) -> Signal:
-        return Signal(self.name, rot=rot)
-
-
 class Signals(set[Signal]):
     def __init__(self: Self) -> None:
         super().__init__()
 
-    def add(
-        self: Self, sigs: WriteSignal | RotateSignal | Signal | Iterable[WriteSignal | RotateSignal | Signal]
-    ) -> None:
+    def add(self: Self, sigs: WriteSignal | Signal | Iterable[WriteSignal | Signal]) -> None:
         if isinstance(sigs, WriteSignal):
             wsig = sigs
             raise AssembleError(f'"{wsig.name}" requires destination register (ex. "{wsig.name}(r0)")')
-        if isinstance(sigs, RotateSignal):
-            rsig = sigs
-            raise AssembleError(f'"{rsig.name}" requires rotate number (ex. "{rsig.name}(-1)")')
         elif isinstance(sigs, Signal):
             ssig = sigs
             if ssig.name in [s.name for s in self]:
@@ -349,7 +334,7 @@ class Signals(set[Signal]):
 
 
 class Instruction:
-    SIGNALS: dict[str, Signal | WriteSignal | RotateSignal] = {
+    SIGNALS: dict[str, Signal | WriteSignal] = {
         "thrsw": Signal("thrsw"),
         "ldunif": Signal("ldunif"),
         "ldunifa": Signal("ldunifa"),
@@ -357,11 +342,9 @@ class Instruction:
         "ldunifarf": WriteSignal("ldunifarf"),
         "ldtmu": WriteSignal("ldtmu"),
         "ldvary": WriteSignal("ldvary"),
-        "ldvpm": Signal("ldvpm"),
         "ldtlb": WriteSignal("ldtlb"),
         "ldtlbu": WriteSignal("ldtlbu"),
         "ucb": Signal("ucb"),
-        "rot": RotateSignal("rot"),
         "wrtmuc": Signal("wrtmuc"),
         "smimm_a": Signal("smimm_a"),
         "smimm_b": Signal("smimm_b"),
@@ -736,8 +719,8 @@ _add_ops: Final[dict[str, Operation]] = {
     "mov": Operation("mov", 249, True, True, False, raddr_mask=3),
     "v10pack": Operation("v10pack", 250, True, True, True),
     "v11fpack": Operation("v11fpack", 251, True, True, True),
-    "rotquad": Operation("rotquad", 252, True, True, True),
-    "rotfull": Operation("rotfull", 253, True, True, True),
+    "quad_rotate": Operation("quad_rotate", 252, True, True, True),
+    "rotate": Operation("rotate", 253, True, True, True),
     "shuffle": Operation("shuffle", 254, True, True, True),
 }
 
@@ -1311,30 +1294,6 @@ class ALU(Instruction):
 
         return 0 | sigs.pack() | cond.pack(sigs) | add_op.pack() | mul_op.pack()
 
-    def rotate(self: Self, dst: Any, src: Any, rot: Any, **kwargs: Any) -> None:
-        sigs = Signals()
-        if "sig" in kwargs:
-            sigs.add(kwargs["sig"])
-            del kwargs["sig"]
-        sigs.add(cast(RotateSignal, Instruction.SIGNALS["rot"])(rot))
-        if not isinstance(src, Register) or src.magic != 1:
-            raise AssembleError("Invalid src object for rotate")
-        if not (isinstance(rot, int) or (isinstance(rot, Register) and rot.magic == 1 and rot.waddr == 5)):
-            raise AssembleError("Invalid rot object for rotate")
-        self.mov(dst, src, sig=sigs, **kwargs)
-
-    def quad_rotate(self: Self, dst: Any, src: Any, rot: Any, **kwargs: Any) -> None:
-        sigs = Signals()
-        if "sig" in kwargs:
-            sigs.add(kwargs["sig"])
-            del kwargs["sig"]
-        sigs.add(cast(RotateSignal, Instruction.SIGNALS["rot"])(rot))
-        if not isinstance(src, Register) or src.magic != 0:
-            raise AssembleError("Invalid src object for quad_rotate")
-        if not (isinstance(rot, int) or (isinstance(rot, Register) and rot.magic == 1 and rot.waddr == 5)):
-            raise AssembleError("Invalid rot object for rotate")
-        self.mov(dst, src, sig=sigs, **kwargs)
-
 
 class Link:
     def __init__(self: Self) -> None:
@@ -1465,14 +1424,6 @@ class SFUIntegrator(Register):
         return ALU(self.asm, self.op_name, dst, src, **kwargs)
 
 
-def _rotate_a(asm: Assembly, *args: Any, **kwargs: Any) -> None:
-    ALU(asm, "nop").rotate(*args, **kwargs)
-
-
-def _quad_rotate_a(asm: Assembly, *args: Any, **kwargs: Any) -> None:
-    ALU(asm, "nop").quad_rotate(*args, **kwargs)
-
-
 _alias_regs: dict[str, Register] = {
     "broadcast": Instruction.REGISTERS["rep"],
     "quad_broadcast": Instruction.REGISTERS["quad"],
@@ -1534,8 +1485,6 @@ def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Any:
             else:
                 g[waddr] = reg
         g["rf"] = [Instruction.REGISTERS[f"rf{i}"] for i in range(64)]
-        g["rotate"] = functools.partial(_rotate_a, asm)
-        g["quad_rotate"] = functools.partial(_quad_rotate_a, asm)
         for alias_name, alias_reg in _alias_regs.items():
             g[alias_name] = alias_reg
         for name, sig in Instruction.SIGNALS.items():
