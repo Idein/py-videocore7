@@ -41,7 +41,7 @@ class Array[T: np.generic](npt.NDArray[T]):
 
     def __new__(cls: type["Array[T]"], *args: Any, **kwargs: Any) -> "Array[T]":
         phyaddr = kwargs.pop("phyaddr")
-        obj = super().__new__(cls, *args, **kwargs)
+        obj: Array[T] = super().__new__(cls, *args, **kwargs)
         obj._address = phyaddr
         return obj
 

@@ -19,10 +19,11 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import ctypes
 import functools
 from collections.abc import Callable, Iterable
 from types import TracebackType
-from typing import Any, Concatenate, Final, Self, cast
+from typing import Annotated, Any, Concatenate, Final, Self, cast
 
 from .util import pack_unpack
 
@@ -108,31 +109,92 @@ class Reference:
         return self.asm.labels[self.name]
 
 
+class OutputPackModifier:
+    _name: Final[str]
+    _f32: Final[Annotated[int | None, "Packed code of pack modifier from 32-bit float"]]
+
+    def __init__(
+        self: Self,
+        name: str,
+        f32: int | None = None,
+    ):
+        self._name = name
+        self._f32 = f32
+
+    @property
+    def name(self: Self) -> str:
+        return self._name
+
+    @property
+    def f32(self: Self) -> int | None:
+        return self._f32
+
+
+class InputUnpackModifier:
+    _name: Final[str]
+    _f32: Final[Annotated[int | None, "Packed code of unpack modifier to 32-bit float"]]
+    _f16: Final[Annotated[int | None, "Packed code of unpack modifier to 16-bit float"]]
+    _i32: Final[Annotated[int | None, "Packed code of unpack modifier to 32-bit integer"]]
+
+    def __init__(
+        self: Self,
+        name: str,
+        f32: int | None = None,
+        f16: int | None = None,
+        i32: int | None = None,
+    ):
+        self._name = name
+        self._i32 = i32
+        self._f16 = f16
+        self._f32 = f32
+
+    @property
+    def name(self: Self) -> str:
+        return self._name
+
+    @property
+    def f32(self: Self) -> int | None:
+        return self._f32
+
+    @property
+    def f16(self: Self) -> int | None:
+        return self._f16
+
+    @property
+    def i32(self: Self) -> int | None:
+        return self._i32
+
+
 class Register:
-    OUTPUT_MODIFIER: Final[dict[str, int]] = {
-        # modifier: (f32, f16)
-        "none": 0,
-        "l": 1,
-        "h": 2,
+    OUTPUT_MODIFIER: Final[dict[str, OutputPackModifier]] = {
+        "none": OutputPackModifier("none", f32=0),
+        "l": OutputPackModifier("l", f32=1),
+        "h": OutputPackModifier("h", f32=2),
     }
 
-    INPUT_MODIFIER: Final[dict[str, tuple[int | None, int | None]]] = {
-        # modifier: (f32, f16)
-        "none": (1, 0),
-        "abs": (0, None),
-        "l": (2, None),
-        "h": (3, None),
-        "r32": (None, 1),
-        "rl2h": (None, 2),
-        "rh2l": (None, 3),
-        "swap": (None, 4),
+    INPUT_MODIFIER: Final[dict[str, InputUnpackModifier]] = {
+        "abs": InputUnpackModifier("abs", f32=0),  # Absolute value.  Only available for some operations.
+        "none": InputUnpackModifier("none", f32=1, f16=0, i32=0),
+        "l": InputUnpackModifier("l", f32=2),  # Convert low 16 bits from 16-bit float to 32-bit float.
+        "h": InputUnpackModifier("h", f32=3),  # Convert high 16 bits from 16-bit float to 32-bit float.
+        "sat": InputUnpackModifier("sat", f32=4),  # Saturate 32-bit floating point to [0.0, 1.0]
+        "nsat": InputUnpackModifier("nsat", f32=5),  # Saturate 32-bit floating point to [-1.0, 1.0]
+        "max0": InputUnpackModifier("max0", f32=6),  # Saturate 32-bit floating point to [0.0, +inf]
+        "r32": InputUnpackModifier("r32", f16=1),  # Convert to 16f and replicate it to the high bits.
+        "rl2h": InputUnpackModifier("rl2h", f16=2),  # Replicate low 16 bits to high
+        "rh2l": InputUnpackModifier("rh2l", f16=3),  # Replicate high 16 bits to low
+        "swap": InputUnpackModifier("swap", f16=4),  # Swap high and low 16 bits
+        "ul": InputUnpackModifier("ul", i32=1),  # Convert low 16 bits from 16-bit integer to unsigned 32-bit int
+        "uh": InputUnpackModifier("uh", i32=2),  # Convert high 16 bits from 16-bit integer to unsigned 32-bit int
+        "il": InputUnpackModifier("il", i32=3),  # Convert low 16 bits from 16-bit integer to signed 32-bit int
+        "ih": InputUnpackModifier("ih", i32=4),  # Convert high 16 bits from 16-bit integer to signed 32-bit int
     }
 
     name: str
     magic: int
     waddr: int
-    pack_bits: int
-    unpack_bits: tuple[int | None, int | None]
+    unpack_modifier: InputUnpackModifier
+    pack_modifier: OutputPackModifier
 
     def __init__(
         self: Self,
@@ -145,16 +207,16 @@ class Register:
         self.name = name
         self.magic = magic
         self.waddr = waddr
-        self.pack_bits = Register.OUTPUT_MODIFIER[pack]
-        self.unpack_bits = Register.INPUT_MODIFIER[unpack]
+        self.pack_modifier = Register.OUTPUT_MODIFIER[pack]
+        self.unpack_modifier = Register.INPUT_MODIFIER[unpack]
 
     def pack(self: Self, modifier: str) -> "Register":
-        if self.pack_bits != Register.OUTPUT_MODIFIER["none"]:
+        if self.pack_modifier != Register.OUTPUT_MODIFIER["none"]:
             raise AssembleError("Conflict pack")
         return Register(self.name, self.magic, self.waddr, pack=modifier)
 
     def unpack(self: Self, modifier: str) -> "Register":
-        if self.unpack_bits != Register.INPUT_MODIFIER["none"]:
+        if self.unpack_modifier != Register.INPUT_MODIFIER["none"]:
             raise AssembleError("Conflict unpack")
         return Register(self.name, self.magic, self.waddr, unpack=modifier)
 
@@ -311,11 +373,11 @@ class Instruction:
         name: Register(name, 1, addr)
         for addr, name in enumerate(
             [
-                "_reg_r0",  # Reserved on V3D 7.x
-                "_reg_r1",  # Reserved on V3D 7.x
-                "_reg_r2",  # Reserved on V3D 7.x
-                "_reg_r3",  # Reserved on V3D 7.x
-                "_reg_r4",  # Reserved on V3D 7.x
+                "_reserved_r0",  # Reserved on V3D 7.x
+                "_reserved_r1",  # Reserved on V3D 7.x
+                "_reserved_r2",  # Reserved on V3D 7.x
+                "_reserved_r3",  # Reserved on V3D 7.x
+                "_reserved_r4",  # Reserved on V3D 7.x
                 "quad",
                 "null",
                 "tlb",
@@ -330,12 +392,12 @@ class Instruction:
                 "sync",
                 "syncu",
                 "syncb",
-                "_reg_recip",  # Reserved on V3D 7.x
-                "_reg_rsqrt",  # Reserved on V3D 7.x
-                "_reg_exp",  # Reserved on V3D 7.x
-                "_reg_log",  # Reserved on V3D 7.x
-                "_reg_sin",  # Reserved on V3D 7.x
-                "_reg_rsqrt2",  # Reserved on V3D 7.x
+                "_reserved_recip",  # Reserved on V3D 7.x
+                "_reserved_rsqrt",  # Reserved on V3D 7.x
+                "_reserved_exp",  # Reserved on V3D 7.x
+                "_reserved_log",  # Reserved on V3D 7.x
+                "_reserved_sin",  # Reserved on V3D 7.x
+                "_reserved_rsqrt2",  # Reserved on V3D 7.x
                 "",
                 "",
                 "",
@@ -475,13 +537,19 @@ class ALUConditions:
 
 
 class ALURaddr:
-    _addr: int | float | Register | Signal
+    _addr: Final[int | float | Register | Signal]
 
     def __init__(self: Self, addr: int | float | Register | Signal) -> None:
         self._addr = addr
 
     def has_smimm(self: Self) -> bool:
         return isinstance(self._addr, int | float)
+
+    @property
+    def modifier(self: Self) -> InputUnpackModifier:
+        if isinstance(self._addr, Register):
+            return self._addr.unpack_modifier
+        return Register.INPUT_MODIFIER["none"]
 
     def pack(self: Self) -> int:
         raddr: int = 0
@@ -518,165 +586,371 @@ class ALURaddr:
         return raddr
 
 
-class ALURaddrs:
-    a: int | float | Register | Signal | None
-    b: int | float | Register | Signal | None
+class Operation:
+    _name: Final[str]
+    _opcode: Final[int]
+    _has_dst: Final[bool]
+    _has_a: Final[bool]
+    _has_b: Final[bool]
+    _raddr_mask: Final[int | None]
 
-    def __init__(self: Self) -> None:
-        self.a = None
-        self.b = None
+    def __init__(
+        self: Self,
+        name: str,
+        opcode: int,
+        has_dst: bool,
+        has_a: bool,
+        has_b: bool,
+        raddr_mask: int | tuple[int, int] | None = None,
+    ) -> None:
+        self._name = name
+        self._opcode = opcode
+        self._has_dst = has_dst
+        self._has_a = has_a
+        self._has_b = has_b
+        if has_b and raddr_mask is not None:
+            raise AssembleError("raddr_mask is not supported for operation that has src2 operand")
+        mask: int | None
+        match raddr_mask:
+            case int() as n:
+                mask = 1 << n
+            case (int() as bottom, int() as top):
+                mask = sum(1 << i for i in range(bottom, top + 1))
+            case None:
+                mask = None
+            case _:
+                raise RuntimeError("unreachable")
+        self._raddr_mask = mask
 
     @property
-    def has_smimm(self: Self) -> bool:
-        return isinstance(self.b, int | float)
+    def name(self: Self) -> str:
+        return self._name
 
-    def determine_mux(
-        self: Self,
-        op_mux: tuple[int | None, int | None],
-        regs: tuple[int | float | Register | None, int | float | Register | None],
-    ) -> tuple[int, int]:
-        reg_a, reg_b = regs
-        mux_a, mux_b = op_mux
+    @property
+    def opcode(self: Self) -> int:
+        return self._opcode
 
-        assert (mux_a is None and isinstance(reg_a, int | float | Register)) or (mux_a is not None and reg_a is None)
-        assert (mux_b is None and isinstance(reg_b, int | float | Register)) or (mux_b is not None and reg_b is None)
-        assert (mux_a is not None and mux_b is not None) or (mux_a is None)
+    @property
+    def has_dst(self: Self) -> bool:
+        return self._has_dst
 
-        def _to_mux(reg: int | float | Register | None) -> int:
-            if isinstance(reg, int | float):
-                assert reg == self.b, f"Bug: small immediate {reg} is not added yet"
-                return 7
-            elif isinstance(reg, Register):
-                if reg.magic == 0:
-                    if isinstance(self.a, Register) and self.a.name == reg.name:
-                        return 6
-                    if isinstance(self.b, Register) and self.b.name == reg.name:
-                        return 7
-                    assert reg == self.b, f"Bug: register {reg} is not added yet"
-                elif reg.waddr < 6:
-                    return reg.waddr
-                else:
-                    assert reg == self.b, f"Bug: register {reg} should be failed to added"
-            else:
-                assert False, "Bug: Type error"
+    @property
+    def has_a(self: Self) -> bool:
+        return self._has_a
 
-            raise RuntimeError("unreachable")
+    @property
+    def has_b(self: Self) -> bool:
+        return self._has_b
 
-        if mux_a is None:
-            mux_a = _to_mux(reg_a)
-        if mux_b is None:
-            mux_b = _to_mux(reg_b)
+    @property
+    def raddr_mask(self: Self) -> int | None:
+        return self._raddr_mask
 
-        return mux_a, mux_b
 
-    def add(self: Self, reg: int | float | Register | Signal | None) -> None:
-        if reg is None:
-            return
+_add_ops: Final[dict[str, Operation]] = {
+    "fadd": Operation("fadd", 0, True, True, True),
+    "faddnf": Operation("faddnf", 0, True, True, True),
+    "vfpack": Operation("vfpack", 53, True, True, True),
+    "add": Operation("add", 56, True, True, True),
+    "sub": Operation("sub", 60, True, True, True),
+    "fsub": Operation("fsub", 64, True, True, True),
+    "imin": Operation("min", 120, True, True, True),
+    "imax": Operation("max", 121, True, True, True),
+    "umin": Operation("umin", 122, True, True, True),
+    "umax": Operation("umax", 123, True, True, True),
+    "shl": Operation("shl", 124, True, True, True),
+    "shr": Operation("shr", 125, True, True, True),
+    "asr": Operation("asr", 126, True, True, True),
+    "ror": Operation("ror", 127, True, True, True),
+    "fmin": Operation("fmin", 128, True, True, True),
+    "fmax": Operation("fmax", 128, True, True, True),
+    "vfmin": Operation("vfmin", 176, True, True, True),
+    "band": Operation("and", 181, True, True, True),
+    "bor": Operation("or", 182, True, True, True),
+    "bxor": Operation("xor", 183, True, True, True),
+    "vadd": Operation("vadd", 184, True, True, True),
+    "vsub": Operation("vsub", 185, True, True, True),
+    "bnot": Operation("not", 186, True, True, False, raddr_mask=0),
+    "neg": Operation("neg", 186, True, True, False, raddr_mask=1),
+    "flapush": Operation("flapush", 186, True, True, False, raddr_mask=2),
+    "flbpush": Operation("flbpush", 186, True, True, False, raddr_mask=3),
+    "flpop": Operation("flpop", 186, True, True, False, raddr_mask=4),
+    "clz": Operation("clz", 186, True, True, False, raddr_mask=5),
+    "setmsf": Operation("setmsf", 186, True, True, False, raddr_mask=6),
+    "setrevf": Operation("setrevf", 186, True, True, False, raddr_mask=7),
+    "nop": Operation("nop", 187, False, False, False, raddr_mask=0),
+    "tidx": Operation("tidx", 187, True, False, False, raddr_mask=1),
+    "eidx": Operation("eidx", 187, True, False, False, raddr_mask=2),
+    "lr": Operation("lr", 187, True, False, False, raddr_mask=3),
+    "vfla": Operation("vfla", 187, True, False, False, raddr_mask=4),
+    "vflna": Operation("vflna", 187, True, False, False, raddr_mask=5),
+    "vflb": Operation("vflb", 187, True, False, False, raddr_mask=6),
+    "vflnb": Operation("vflnb", 187, True, False, False, raddr_mask=7),
+    "xcd": Operation("xcd", 187, True, False, False, raddr_mask=8),
+    "ycd": Operation("ycd", 187, True, False, False, raddr_mask=9),
+    "msf": Operation("msf", 187, True, False, False, raddr_mask=10),
+    "revf": Operation("revf", 187, True, False, False, raddr_mask=11),
+    "iid": Operation("iid", 187, True, False, False, raddr_mask=12),
+    "sampid": Operation("sampid", 187, True, False, False, raddr_mask=13),
+    "barrierid": Operation("barrierid", 187, True, False, False, raddr_mask=14),
+    "tmuwt": Operation("tmuwt", 187, True, False, False, raddr_mask=15),
+    "vpmwt": Operation("vpmwt", 187, True, False, False, raddr_mask=16),
+    "flafirst": Operation("flafirst", 187, True, False, False, raddr_mask=17),
+    "flnafirst": Operation("flnafirst", 187, True, False, False, raddr_mask=18),
+    "fxcd": Operation("fxcd", 187, True, False, False, raddr_mask=(32, 34)),
+    "fycd": Operation("fycd", 187, True, False, False, raddr_mask=(36, 38)),
+    "ldvpmv_in": Operation("ldvpmv_in", 188, True, True, False, raddr_mask=0),
+    "ldvpmd_in": Operation("ldvpmd_in", 188, True, True, False, raddr_mask=1),
+    "ldvpmp": Operation("ldvpmp", 188, True, True, False, raddr_mask=2),
+    "recip": Operation("recip", 188, True, True, False, raddr_mask=32),
+    "rsqrt": Operation("rsqrt", 188, True, True, False, raddr_mask=33),
+    "exp": Operation("exp", 188, True, True, False, raddr_mask=34),
+    "log": Operation("log", 188, True, True, False, raddr_mask=35),
+    "sin": Operation("sin", 188, True, True, False, raddr_mask=36),
+    "rsqrt2": Operation("rsqrt2", 188, True, True, False, raddr_mask=37),
+    "ballot": Operation("ballot", 188, True, True, False, raddr_mask=38),
+    "bcastf": Operation("bcastf", 188, True, True, False, raddr_mask=39),
+    "alleq": Operation("alleq", 188, True, True, False, raddr_mask=40),
+    "allfeq": Operation("allfeq", 188, True, True, False, raddr_mask=41),
+    "ldvpmg_in": Operation("ldvpmg_in", 189, True, True, True),
+    "stvpmv": Operation("stvpmv", 190, True, False, True),
+    "stvpmd": Operation("stvpmd", 190, True, False, True),
+    "stvpmp": Operation("stvpmp", 190, True, False, True),
+    "fcmp": Operation("fcmp", 192, True, True, True),
+    "vfmax": Operation("vfmax", 240, True, True, True),
+    "fround": Operation("fround", 245, True, True, False, raddr_mask=(0, 2)),
+    "ftoin": Operation("ftoin", 245, True, True, False, raddr_mask=3),
+    "ftrunc": Operation("ftrunc", 245, True, True, False, raddr_mask=(16, 18)),
+    "ftoiz": Operation("ftoiz", 245, True, True, False, raddr_mask=19),
+    "ffloor": Operation("ffloor", 245, True, True, False, raddr_mask=(32, 34)),
+    "ftouz": Operation("ftouz", 245, True, True, False, raddr_mask=35),
+    "fceil": Operation("fceil", 245, True, True, False, raddr_mask=(48, 50)),
+    "ftoc": Operation("ftoc", 245, True, True, False, raddr_mask=51),
+    "fdx": Operation("fdx", 246, True, True, False, raddr_mask=(0, 2)),
+    "fdy": Operation("fdy", 246, True, True, False, raddr_mask=(16, 18)),
+    "itof": Operation("itof", 246, True, True, False, raddr_mask=(32, 34)),
+    "utof": Operation("utof", 246, True, True, False, raddr_mask=(36, 38)),
+    "vpack": Operation("vpack", 247, True, True, True),
+    "v8pack": Operation("v8pack", 248, True, True, True),
+    "fmov": Operation("fmov", 249, True, True, False, raddr_mask=(0, 2)),
+    "mov": Operation("mov", 249, True, True, False, raddr_mask=3),
+    "v10pack": Operation("v10pack", 250, True, True, True),
+    "v11fpack": Operation("v11fpack", 251, True, True, True),
+    "rotateq": Operation("rotateq", 252, True, True, True),
+    "rotate": Operation("rotate", 253, True, True, True),
+    "shuffle": Operation("shuffle", 254, True, True, True),
+}
 
-        if isinstance(reg, Signal):
-            sig = reg
-            if not sig.is_rotate:
-                return
-            if self.b is None:
-                self.b = sig
-            elif isinstance(self.b, Signal) and self.b.is_rotate and self.b.rotate_count == sig.rotate_count:
-                pass
-            else:
-                if isinstance(self.b, int | float):
-                    raise AssembleError(f"Conflict small immediates {self.b} and signal {sig.name}")
-                elif isinstance(self.b, Register):
-                    raise AssembleError(f"Conflict register {self.b} and signal {sig.name}")
-                elif isinstance(self.b, Signal):
-                    raise AssembleError(f"Conflict signal {self.b} and signal {sig.name}")
-                else:
-                    assert False, "Bug: Lack of type exhaustivity"
-        elif isinstance(reg, int | float):
-            # small immediate should be b
-            if self.b is None:
-                self.b = reg
-            elif self.b == reg:
-                pass
-            else:
-                if isinstance(self.b, int | float):
-                    raise AssembleError(f"Conflict small immediates {self.b} and small immediates {reg}")
-                elif isinstance(self.b, Register):
-                    raise AssembleError(f"Conflict register {self.b} and small immediates {reg}")
-                elif isinstance(self.b, Signal):
-                    raise AssembleError(f"Conflict signal {self.b} small immediates {reg}")
-                else:
-                    assert False, "Bug: Lack of type exhaustivity"
-        else:
-            # already exist
-            if self.a is not None and isinstance(self.a, Register):
-                if self.a.name == reg.name:
-                    return
-            if self.b is not None and isinstance(self.b, Register):
-                if self.b.name == reg.name:
-                    return
+_mul_ops: Final[dict[str, Operation]] = {
+    "add": Operation("add", 1, True, True, True),
+    "sub": Operation("sub", 2, True, True, True),
+    "umul24": Operation("umul24", 3, True, True, True),
+    "vfmul": Operation("vfmul", 4, True, True, True),
+    "smul24": Operation("smul24", 9, True, True, True),
+    "multop": Operation("multop", 10, True, True, True),
+    "fmov": Operation("fmov", 14, True, True, False, raddr_mask=(0, 2)),
+    "mov": Operation("mov", 14, True, True, False, raddr_mask=3),
+    "ftounorm16": Operation("ftounorm16", 14, True, True, False, raddr_mask=32),
+    "ftosnorm16": Operation("ftosnorm16", 14, True, True, False, raddr_mask=33),
+    "vftounorm8": Operation("vftounorm8", 14, True, True, False, raddr_mask=34),
+    "vftosnorm8": Operation("vftosnorm8", 14, True, True, False, raddr_mask=35),
+    "vftounorm10lo": Operation("vftounorm10lo", 14, True, True, False, raddr_mask=48),
+    "vftounorm10hi": Operation("vftounorm10hi", 14, True, True, False, raddr_mask=49),
+    "nop": Operation("nop", 14, False, False, False, raddr_mask=63),
+    "fmul": Operation("fmul", 16, True, True, True),
+}
 
-            # not yet
-            if reg.magic == 0:
-                if self.a is None:
-                    self.a = reg
-                    return
-                elif self.b is None:
-                    self.b = reg
-                    return
-                else:
-                    raise AssembleError("Too many register files read")
-            elif reg.waddr < 6:
-                return
-            else:
-                raise AssembleError(f"Invalid source register {reg.name}")
 
-    def pack(self: Self) -> int:
-        raddr_a, raddr_b = 0, 0
+class ALUInstructionPacking(ctypes.Structure):
+    _fields_ = [
+        ("raddr_b", ctypes.c_int, 6),
+        ("raddr_a", ctypes.c_int, 6),
+        ("raddr_d", ctypes.c_int, 6),
+        ("raddr_c", ctypes.c_int, 6),
+        ("op_add", ctypes.c_int, 8),
+        ("waddr_add", ctypes.c_int, 6),
+        ("waddr_mul", ctypes.c_int, 6),
+        ("ma", ctypes.c_int, 1),
+        ("mm", ctypes.c_int, 1),
+        ("cond", ctypes.c_int, 7),
+        ("signal", ctypes.c_int, 5),
+        ("op_mul", ctypes.c_int, 6),
+    ]
 
-        if isinstance(self.a, Register):
-            raddr_a = self.a.waddr
+    @property
+    def op_mul(self: Self) -> int:
+        return self.op_mul
 
-        def pack_smimms_int(x: int) -> int:
-            smimms_int = {}
-            for i in range(16):
-                smimms_int[i] = i
-                smimms_int[i - 16] = i + 16
-                smimms_int[pack_unpack("i", "I", i - 16)] = i + 16
-                smimms_int[pack_unpack("f", "I", 2 ** (i - 8))] = i + 32
-            return smimms_int[x]
+    @op_mul.setter
+    def op_mul(self: Self, value: int | Operation) -> None:
+        opcode: int
+        match value:
+            case int():
+                opcode = value
+            case Operation():
+                opcode = value.opcode
+            case _:
+                raise RuntimeError("unreachable")
+        if all(opcode != op.opcode for op in _mul_ops.values()):
+            raise AssembleError(f'Invalid mul opcode "{opcode}"')
+        if opcode < 0 or 2**6 <= opcode:
+            raise AssembleError(f'Invalid mul opcode "{opcode}"')
+        self.op_mul = opcode
 
-        def pack_smimms_float(x: float) -> int:
-            smimms_float = {}
-            for i in range(16):
-                # Denormal numbers
-                smimms_float[pack_unpack("I", "f", i)] = i
-                smimms_float[2 ** (i - 8)] = i + 32
-            return smimms_float[x]
+    @property
+    def signal(self: Self) -> int:
+        return self.signal
 
-        if isinstance(self.b, int):
-            raddr_b = pack_smimms_int(self.b)
-        if isinstance(self.b, float):
-            raddr_b = pack_smimms_float(self.b)
-        if isinstance(self.b, Register):
-            raddr_b = self.b.waddr
-        if isinstance(self.b, Signal):
-            if isinstance(self.b.rot, int):
-                raddr_b = pack_smimms_int(self.b.rot)
-            if isinstance(self.b.rot, Register):
-                raddr_b = 0  # rotate by r5
+    @signal.setter
+    def signal(self: Self, value: int | Signals) -> None:
+        sig: int
+        match value:
+            case int():
+                sig = value
+            case Signal():
+                sig = value.pack()
+            case _:
+                raise RuntimeError("unreachable")
+        if sig < 0 or 2**5 <= sig:
+            raise AssembleError(f'Invalid signal "{value}"')
+        self.signal = sig
 
-        return 0 | (raddr_a << 6) | (raddr_b << 0)
+    @property
+    def cond(self: Self) -> int:
+        return self.cond
+
+    @cond.setter
+    def cond(self: Self, value: int) -> None:
+        cond: int
+        match value:
+            case int():
+                cond = value
+            case _:
+                raise RuntimeError("unreachable")
+        if cond < 0 or 2**7 <= cond:
+            raise AssembleError(f'Invalid condition "{value}"')
+        self.cond = cond
+
+    @property
+    def mm(self: Self) -> int:
+        return self.mm
+
+    @mm.setter
+    def mm(self: Self, value: int) -> None:
+        if value < 0 or 2**1 <= value:
+            raise AssembleError(f'Invalid mm "{value}"')
+        self.mm = value
+
+    @property
+    def ma(self: Self) -> int:
+        return self.ma
+
+    @ma.setter
+    def ma(self: Self, value: int) -> None:
+        if value < 0 or 2**1 <= value:
+            raise AssembleError(f'Invalid ma "{value}"')
+        self.ma = value
+
+    @property
+    def waddr_mul(self: Self) -> int:
+        return self.waddr_mul
+
+    @waddr_mul.setter
+    def waddr_mul(self: Self, value: int) -> None:
+        if value < 0 or 2**6 <= value:
+            raise AssembleError(f'Invalid waddr_mul "{value}"')
+        self.waddr_mul = value
+
+    @property
+    def waddr_add(self: Self) -> int:
+        return self.waddr_add
+
+    @waddr_add.setter
+    def waddr_add(self: Self, value: int) -> None:
+        if value < 0 or 2**6 <= value:
+            raise AssembleError(f'Invalid waddr_add "{value}"')
+        self.waddr_add = value
+
+    @property
+    def op_add(self: Self) -> int:
+        return self.op_add
+
+    @op_add.setter
+    def op_add(self: Self, value: int | Operation) -> None:
+        opcode: int
+        match value:
+            case int():
+                opcode = value
+            case Operation():
+                opcode = value.opcode
+            case _:
+                raise RuntimeError("unreachable")
+        if all(opcode != op.opcode for op in _add_ops.values()):
+            raise AssembleError(f'Invalid add opcode "{opcode}"')
+        if opcode < 0 or 2**8 <= opcode:
+            raise AssembleError(f'Invalid add opcode "{opcode}"')
+        self.op_add = opcode
+
+    @property
+    def raddr_c(self: Self) -> int:
+        return self.raddr_c
+
+    @raddr_c.setter
+    def raddr_c(self: Self, value: int) -> None:
+        if value < 0 or 2**6 <= value:
+            raise AssembleError(f'Invalid raddr_c "{value}"')
+        self.raddr_c = value
+
+    @property
+    def raddr_d(self: Self) -> int:
+        return self.raddr_d
+
+    @raddr_d.setter
+    def raddr_d(self: Self, value: int) -> None:
+        if value < 0 or 2**6 <= value:
+            raise AssembleError(f'Invalid raddr_d "{value}"')
+        self.raddr_d = value
+
+    @property
+    def raddr_a(self: Self) -> int:
+        return self.raddr_a
+
+    @raddr_a.setter
+    def raddr_a(self: Self, value: int) -> None:
+        if value < 0 or 2**6 <= value:
+            raise AssembleError(f'Invalid raddr_a "{value}"')
+        self.raddr_a = value
+
+    @property
+    def raddr_b(self: Self) -> int:
+        return self.raddr_b
+
+    @raddr_b.setter
+    def raddr_b(self: Self, value: int) -> None:
+        if value < 0 or 2**6 <= value:
+            raise AssembleError(f'Invalid raddr_b "{value}"')
+        self.raddr_b = value
+
+
+class ALUInstruction(ctypes.Union):
+    _anonymous_ = ("packed",)
+    _fields_ = [
+        ("packed", ALUInstructionPacking),
+        ("raw", ctypes.c_uint64),
+    ]
+
+    def __int__(self: Self) -> int:
+        return int(self.raw)
 
 
 class ALUOp:
-    OPERATIONS: dict[str, int] = {}
-    MUX_A: dict[str, int] = {}
-    MUX_B: dict[str, int] = {}
+    OPERATIONS: dict[str, Operation] = {}
 
     name: str
-    # op:
+    op: Operation
     dst: Register
-    src1: int | float | Register | None
-    src2: int | float | Register | None
+    raddr_a: ALURaddr
+    raddr_b: ALURaddr
     cond: str | None
     sigs: Signals
 
@@ -694,29 +968,33 @@ class ALUOp:
         self.name = opr
         self.op = self.OPERATIONS[opr]
         self.dst = dst
-        self.src1 = src1
-        self.src2 = src2
+
+        match (self.op.has_a, src1):
+            case (False, int() | float() | Register()):
+                raise AssembleError(f'"{self.name}" rejects src1')
+            case (True, None):
+                raise AssembleError(f'"{self.name}" requires src1')
+            case (True, int() | float() | Register()):
+                self.raddr_a = ALURaddr(src1)
+            case (False, None):
+                self.raddr_a = ALURaddr(Register("_unused", 0, 0))
+
+        match (self.op.has_b, src2):
+            case (False, int() | float() | Register()):
+                raise AssembleError(f'"{self.name}" rejects src2')
+            case (True, None):
+                raise AssembleError(f'"{self.name}" requires src2')
+            case (True, int() | float() | Register()):
+                self.raddr_b = ALURaddr(src2)
+            case (False, None):
+                self.raddr_b = ALURaddr(Register("_unused", 0, 0))
+
         self.cond = cond
         self.sigs = Signals()
         if sig is not None:
             self.sigs.add(sig)
 
-        self.mux_a = None
-        self.mux_b = None
-
-        if self.name in self.MUX_A:
-            self.mux_a = self.MUX_A[self.name]
-        else:
-            if self.src1 is None:
-                raise AssembleError(f'"{self.name}" requires src1')
-
-        if self.name in self.MUX_B:
-            self.mux_b = self.MUX_B[self.name]
-        else:
-            if self.src2 is None:
-                raise AssembleError(f'"{self.name}" requires src2')
-
-    def pack(self: Self, raddr: ALURaddrs) -> int:
+    def pack(self: Self) -> int:
         assert False, "Bug: Not implemented"
 
 
@@ -724,291 +1002,210 @@ class AddALUOp(ALUOp):
     def __init__(self: Self, opr: str, *args: Any, **kwargs: Any) -> None:
         super().__init__(opr, *args, **kwargs)
 
-    def pack(self: Self, raddr: ALURaddrs) -> int:
-        op: int = self.op
-        mux_a, mux_b = raddr.determine_mux((self.mux_a, self.mux_b), (self.src1, self.src2))
-
-        if self.name in ["fadd", "faddnf", "fsub", "fmax", "fmin", "fcmp"]:
-            op |= self.dst.pack_bits << 4
-
-            a_unpack = (
-                self.src1.unpack_bits[0] if isinstance(self.src1, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if a_unpack is None:
-                raise RuntimeError("unreachable")
-            b_unpack = (
-                self.src2.unpack_bits[0] if isinstance(self.src2, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if b_unpack is None:
+    def pack(self: Self) -> int:
+        op: int = self.op.opcode
+        raddr_a = self.raddr_a.pack()
+        match self.op.raddr_mask:
+            case int() as raddr_mask:
+                if raddr_mask == 0:
+                    raddr_b = 0
+                else:
+                    raddr_b = (raddr_mask & -raddr_mask).bit_length() - 1
+            case None:
+                raddr_b = self.raddr_b.pack()
+            case _:
                 raise RuntimeError("unreachable")
 
-            ordering = a_unpack * 8 + mux_a > b_unpack * 8 + mux_b
-            if (self.name in ["fmin", "fadd"] and ordering) or (self.name in ["fmax", "faddnf"] and not ordering):
-                a_unpack, b_unpack = b_unpack, a_unpack
-                mux_a, mux_b = mux_b, mux_a
+        match self.name:
+            case "fadd" | "faddnf" | "fsub" | "fmax" | "fmin" | "fcmp":
+                if self.name != "fcmp":
+                    pack = self.dst.pack_modifier.f32
+                    if pack is None:
+                        raise AssembleError(f'"{self.name}" requires dst as register with modifier from f32')
+                    op |= pack << 4
 
-            op |= a_unpack << 2
-            op |= b_unpack << 0
+                a_unpack = self.raddr_a.modifier.f32
+                if a_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src1 as register with modifier to f32')
+                b_unpack = self.raddr_b.modifier.f32
+                if b_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src2 as register with modifier to f32')
 
-        if self.name in ["fround", "ftrunc", "ffloor", "fceil", "fdx", "fdy"]:
-            if not isinstance(self.src1, Register):
-                raise AssembleError(f'"{self.name}" requires src1 as register')
-            if self.src1.unpack_bits == Register.INPUT_MODIFIER["abs"]:
-                raise AssembleError('"abs" unpacking is not allowed here')
+                ordering = a_unpack * 64 + raddr_a > b_unpack * 64 + raddr_b
+                if (self.name in ["fmin", "fadd"] and ordering) or (self.name in ["fmax", "faddnf"] and not ordering):
+                    a_unpack, b_unpack = b_unpack, a_unpack
+                    raddr_a, raddr_b = raddr_b, raddr_a
+                    if isinstance(self.raddr_a._addr, int | float) or isinstance(self.raddr_b._addr, int | float):
+                        assert self.raddr_a._addr != self.raddr_b._addr
+                        sigs = Signals()
+                        for sig in self.sigs:
+                            if sig.name == "smimm_a":
+                                sigs.add(Signal("smimm_b"))
+                            elif sig.name == "smimm_b":
+                                sigs.add(Signal("smimm_a"))
+                            else:
+                                sigs.add(sig)
+                        self.sigs = sigs
 
-            mux_b |= self.dst.pack_bits
-            a_unpack = (
-                self.src1.unpack_bits[0] if isinstance(self.src1, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if a_unpack is None:
-                raise RuntimeError("unreachable")
+                op |= a_unpack << 2
+                op |= b_unpack << 0
+            case "vfpack":
+                if self.raddr_a.modifier.name == "abs" or self.raddr_b.modifier.name == "abs":
+                    raise AssembleError(f'"{self.name}" rejects "abs" modifier')
 
-            op = (op & ~(1 << 2)) | a_unpack << 2
+                a_unpack = self.raddr_a.modifier.f32
+                if a_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src1 as register with modifier to f32')
+                b_unpack = self.raddr_b.modifier.f32
+                if b_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src2 as register with modifier to f32')
 
-        if self.name in ["ftoin", "ftoiz", "ftouz", "ftoc"]:
-            if self.dst.pack_bits != Register.OUTPUT_MODIFIER["none"]:
-                raise AssembleError("packing is not allowed here")
-            if not isinstance(self.src1, Register):
-                raise AssembleError(f'"{self.name}" requires src1 as register')
-            if self.src1.unpack_bits == Register.INPUT_MODIFIER["abs"]:
-                raise AssembleError('"abs" unpacking is not allowed here')
+                op = (op & ~(0x3 << 2)) | (a_unpack << 2)
+                op = (op & ~(0x3 << 0)) | (b_unpack << 0)
+            case "fround" | "ftrunc" | "ffloor" | "fceil" | "fdx" | "fdy":
+                pack = self.dst.pack_modifier.f32
+                if pack is None:
+                    raise AssembleError(f'"{self.name}" requires dst as register with modifier from f32')
+                raddr_b |= pack
 
-            a_unpack = (
-                self.src1.unpack_bits[0] if isinstance(self.src1, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if a_unpack is None:
-                raise RuntimeError("unreachable")
+                if not isinstance(self.raddr_a._addr, Register):
+                    raise AssembleError(f'"{self.name}" requires raddr_a as register')
+                if self.raddr_a.modifier.name == "abs":
+                    raise AssembleError(f'"{self.name}" rejects "abs" modifier')
 
-            op &= ~0b1100
-            op |= a_unpack << 2
+                a_unpack = self.raddr_a.modifier.f32
+                if a_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src as register with modifier to f32')
 
-        if self.name in ["vfpack"]:
-            a_unpack = (
-                self.src1.unpack_bits[0] if isinstance(self.src1, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if a_unpack is None:
-                raise RuntimeError("unreachable")
-            b_unpack = (
-                self.src2.unpack_bits[0] if isinstance(self.src2, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if b_unpack is None:
-                raise RuntimeError("unreachable")
+                raddr_b = (raddr_b & ~(3 << 2)) | a_unpack << 2
+            case "ftoin" | "ftoiz" | "ftouz" | "ftoc":
+                if self.dst.pack_modifier.name != "none":
+                    raise AssembleError(f'"{self.name}" rejects dst with "{self.dst.pack_modifier.name}" modifier')
+                if not isinstance(self.raddr_a._addr, Register):
+                    raise AssembleError(f'"{self.name}" requires src as register')
+                if self.raddr_a.modifier.name == "abs":
+                    raise AssembleError(f'"{self.name}" rejects src with "{self.raddr_a.modifier.name}" modifier')
 
-            op &= ~0b101
-            op |= a_unpack << 2
-            op |= b_unpack
+                a_unpack = self.raddr_a.modifier.f32
+                if a_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src as register with modifier to f32')
 
-        if self.name in ["vfmin", "vfmax"]:
-            a_unpack = (
-                self.src1.unpack_bits[1] if isinstance(self.src1, Register) else Register.INPUT_MODIFIER["none"][1]
-            )
-            if a_unpack is None:
-                raise RuntimeError("unreachable")
+                raddr_b |= (raddr_b & ~(3 << 2)) | a_unpack << 2
+            case "vfmin" | "vfmax":
+                if self.dst.pack_modifier.name != "none":
+                    raise AssembleError(f'"{self.name}" rejects dst with "{self.dst.pack_modifier.name}" modifier')
 
-            op |= a_unpack
+                a_unpack = self.raddr_a.modifier.f16
+                if a_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src as register with modifier to f16')
 
-        return 0 | (self.dst.magic << 44) | (self.dst.waddr << 32) | (op << 24) | (mux_b << 15) | (mux_a << 12)
+                op |= a_unpack
+            case "mov":
+                if self.dst.pack_modifier.name != "none":
+                    raise AssembleError(f'"{self.name}" rejects dst with "{self.dst.pack_modifier.name}" modifier')
 
-    OPERATIONS = {
-        # FADD is FADDNF depending on the order of the mux_a/mux_b.
-        "fadd": 0,
-        "faddnf": 0,
-        "vfpack": 53,
-        "add": 56,
-        "sub": 60,
-        "fsub": 64,
-        "imin": 120,
-        "imax": 121,
-        "umin": 122,
-        "umax": 123,
-        "shl": 124,
-        "shr": 125,
-        "asr": 126,
-        "ror": 127,
-        # FMIN is FMAX depending on the order of the mux_a/mux_b.
-        "fmin": 128,
-        "fmax": 128,
-        "vfmin": 176,
-        "band": 181,
-        "bor": 182,
-        "bxor": 183,
-        "bnot": 186,
-        "neg": 186,
-        "flapush": 186,
-        "flbpush": 186,
-        "flpop": 186,
-        "_op_recip": 186,
-        "setmsf": 186,
-        "setrevf": 186,
-        "nop": 187,
-        "tidx": 187,
-        "eidx": 187,
-        "lr": 187,
-        "vfla": 187,
-        "vflna": 187,
-        "vflb": 187,
-        "vflnb": 187,
-        "msf": 187,
-        "revf": 187,
-        "iid": 187,
-        "sampid": 187,
-        "barrierid": 187,
-        "tmuwt": 187,
-        "vpmwt": 187,
-        "_op_rsqrt": 188,
-        "_op_exp": 188,
-        "_op_log": 188,
-        "_op_sin": 188,
-        "_op_rsqrt2": 188,
-        "fcmp": 192,
-        "vfmax": 240,
-        "fround": 245,
-        "ftoin": 245,
-        "ftrunc": 245,
-        "ftoiz": 245,
-        "ffloor": 246,
-        "ftouz": 246,
-        "fceil": 246,
-        "ftoc": 246,
-        "fdx": 247,
-        "fdy": 247,
-        # The stvpms are distinguished by the waddr field.
-        "stvpmv": 248,
-        "stvpmd": 248,
-        "stvpmp": 248,
-        "itof": 252,
-        "clz": 252,
-        "utof": 252,
-    }
+                a_unpack = self.raddr_a.modifier.i32
+                if a_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src as register with modifier to i32')
 
-    MUX_A = {
-        "nop": 0,
-        "tidx": 1,
-        "eidx": 2,
-        "lr": 3,
-        "vfla": 4,
-        "vflna": 5,
-        "vflb": 6,
-        "vflnb": 7,
-        "msf": 0,
-        "revf": 1,
-        "iid": 2,
-        "sampid": 3,
-        "barrierid": 4,
-        "tmuwt": 5,
-        "vpmwt": 6,
-    }
+                raddr_b |= a_unpack << 2
+            case "fmov":
+                pack = self.dst.pack_modifier.f32
+                if pack is None:
+                    raise AssembleError(f'"{self.name}" requires dst as register with modifier from f32')
 
-    MUX_B = {
-        "bnot": 0,
-        "neg": 1,
-        "flapush": 2,
-        "flbpush": 3,
-        "flpop": 4,
-        "_op_recip": 5,
-        "setmsf": 6,
-        "setrevf": 7,
-        "nop": 0,
-        "tidx": 0,
-        "eidx": 0,
-        "lr": 0,
-        "vfla": 0,
-        "vflna": 0,
-        "vflb": 0,
-        "vflnb": 0,
-        "fround": 0,
-        "ftoin": 3,
-        "ftrunc": 4,
-        "ftoiz": 7,
-        "ffloor": 0,
-        "ftouz": 3,
-        "fceil": 4,
-        "ftoc": 7,
-        "fdx": 0,
-        "fdy": 4,
-        "msf": 2,
-        "revf": 2,
-        "iid": 2,
-        "sampid": 2,
-        "barrierid": 2,
-        "tmuwt": 2,
-        "vpmwt": 2,
-        "_op_rsqrt": 3,
-        "_op_exp": 4,
-        "_op_log": 5,
-        "_op_sin": 6,
-        "_op_rsqrt2": 7,
-        "itof": 0,
-        "clz": 3,
-        "utof": 4,
-    }
+                a_unpack = self.raddr_a.modifier.f32
+                if a_unpack is None:
+                    raise AssembleError(f'"{self.name}" requires src as register with modifier to f32')
+
+                raddr_b = pack | (a_unpack << 2)
+            case "nop":
+                pass
+            case _:
+                if self.dst.pack_modifier.name != "none":
+                    raise AssembleError(f'"{self.name}" rejects dst with "{self.dst.pack_modifier.name}" modifier')
+                if self.raddr_a.modifier.name != "none":
+                    raise AssembleError(f'"{self.name}" rejects src1 with "{self.raddr_a.modifier.name}" modifier')
+                if self.raddr_b.modifier.name != "none":
+                    raise AssembleError(f'"{self.name}" rejects src2 with "{self.raddr_b.modifier.name}" modifier')
+
+        inst = ALUInstruction()
+        inst.ma = self.dst.magic
+        inst.waddr_add = self.dst.waddr
+        inst.op_add = op
+        inst.raddr_a = raddr_a
+        inst.raddr_b = raddr_b
+
+        return int(inst)
+
+    # v3d71_add_ops
+    OPERATIONS = _add_ops
 
 
 class MulALUOp(ALUOp):
     def __init__(self: Self, opr: str, *args: Any, **kwargs: Any) -> None:
         super().__init__(opr, *args, **kwargs)
 
-    def pack(self: Self, raddr: ALURaddrs) -> int:
-        op = self.op
-        mux_a, mux_b = raddr.determine_mux((self.mux_a, self.mux_b), (self.src1, self.src2))
+    def pack(self: Self) -> int:
+        op = self.op.opcode
+        raddr_c = self.raddr_a.pack()
+        match self.op.raddr_mask:
+            case int() as raddr_mask:
+                if raddr_mask == 0:
+                    raddr_d = 0
+                else:
+                    raddr_d = (raddr_mask & -raddr_mask).bit_length() - 1
+            case None:
+                raddr_d = self.raddr_b.pack()
+            case _:
+                raise RuntimeError("unreachable")
 
         if self.name in ["vfmul"]:
-            a_unpack = (
-                self.src1.unpack_bits[1] if isinstance(self.src1, Register) else Register.INPUT_MODIFIER["none"][1]
-            )
+            a_unpack = self.raddr_a.modifier.f16
             if a_unpack is None:
-                raise RuntimeError("unreachable")
+                raise AssembleError(f'"{self.name}" requires src1 as register with modifier to f16')
 
             op += a_unpack
 
         if self.name in ["fmul"]:
-            a_unpack = (
-                self.src1.unpack_bits[0] if isinstance(self.src1, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if a_unpack is None:
-                raise RuntimeError("unreachable")
-            b_unpack = (
-                self.src2.unpack_bits[0] if isinstance(self.src2, Register) else Register.INPUT_MODIFIER["none"][0]
-            )
-            if b_unpack is None:
-                raise RuntimeError("unreachable")
+            pack = self.dst.pack_modifier.f32
+            if pack is None:
+                raise AssembleError(f'"{self.name}" requires dst as register with modifier from f32')
 
-            op += self.dst.pack_bits << 4
+            a_unpack = self.raddr_a.modifier.f32
+            if a_unpack is None:
+                raise AssembleError(f'"{self.name}" requires src1 as register with modifier to f32')
+            b_unpack = self.raddr_b.modifier.f32
+            if b_unpack is None:
+                raise AssembleError(f'"{self.name}" requires src2 as register with modifier to f32')
+
+            op += pack << 4
             op |= a_unpack << 2
             op |= b_unpack << 0
 
         if self.name in ["fmov"]:
-            a_unpack = self.src1.unpack_bits[0] if isinstance(self.src1, Register) else 0
+            pack = self.dst.pack_modifier.f32
+            if pack is None:
+                raise AssembleError(f'"{self.name}" requires dst as register with modifier from f32')
+
+            a_unpack = self.raddr_a.modifier.f32  # TODO: ここ要確認
             if a_unpack is None:
-                raise RuntimeError("unreachable")
+                raise AssembleError(f'"{self.name}" requires src as register with modifier to f32')
 
-            op |= (self.dst.pack_bits >> 1) & 1
-            mux_b = ((self.dst.pack_bits & 1) << 2) | a_unpack
+            raddr_d |= pack
+            raddr_d |= a_unpack << 2
 
-        return 0 | (op << 58) | (self.dst.magic << 45) | (self.dst.waddr << 38) | (mux_b << 21) | (mux_a << 18)
+        inst = ALUInstruction()
+        inst.mm = self.dst.magic
+        inst.waddr_mul = self.dst.waddr
+        inst.op_mul = op
+        inst.raddr_c = raddr_c
+        inst.raddr_d = raddr_d
 
-    OPERATIONS = {
-        "add": 1,
-        "sub": 2,
-        "umul24": 3,
-        "vfmul": 4,
-        "smul24": 9,
-        "multop": 10,
-        "fmov": 14,
-        "nop": 15,
-        "mov": 15,
-        "fmul": 16,
-    }
+        return int(inst)
 
-    MUX_A = {
-        "nop": 0,
-    }
-
-    MUX_B = {
-        "nop": 4,
-        "mov": 7,
-        "fmov": 0,
-    }
+    # v3d71_mul_ops
+    OPERATIONS = _mul_ops
 
 
 class ALU(Instruction):
@@ -1027,13 +1224,13 @@ class ALU(Instruction):
             self.mul_op = MulALUOp(opr, *args, **kwargs)
         else:
             raise AssembleError(f'"{opr}" is unknown operation')
-        self.repack()
+        self._repack()
 
     def dual_issue(self: Self, opr: str, *args: Any, **kwargs: Any) -> None:
         if self.mul_op is not None:
-            raise AssembleError("Conflict MulALU operation")
+            raise AssembleError(f'Conflict Mul ALU operation. "{self.mul_op.name}" is already issued.')
         self.mul_op = MulALUOp(opr, *args, **kwargs)
-        self.repack()
+        self._repack()
 
     # Extract MulALUOp.OPERATIONS for typing
     #
@@ -1083,7 +1280,7 @@ class ALU(Instruction):
     def fmul(self: Self) -> Callable[..., None]:
         return functools.partial(self.dual_issue, "fmul")
 
-    def repack(self: Self) -> None:
+    def _repack(self: Self) -> None:
         self.pack_result = None
         self.pack_result = self.pack()
 
@@ -1096,24 +1293,23 @@ class ALU(Instruction):
         if mul_op is None:
             mul_op = MulALUOp("nop")
 
-        raddr = ALURaddrs()
-        raddr.add(add_op.src1)
-        raddr.add(add_op.src2)
-        raddr.add(mul_op.src1)
-        raddr.add(mul_op.src2)
-
         sigs = Signals()
         sigs.add(add_op.sigs)
         sigs.add(mul_op.sigs)
-        for sig in sigs:
-            raddr.add(sig)
 
-        if raddr.has_smimm and not sigs.is_rotate:
-            sigs.add(Instruction.SIGNALS["smimm"])
+        if not sigs.is_rotate:
+            if add_op.raddr_a.has_smimm():
+                sigs.add(Instruction.SIGNALS["smimm_a"])
+            if add_op.raddr_b.has_smimm():
+                sigs.add(Instruction.SIGNALS["smimm_b"])
+            if mul_op.raddr_a.has_smimm():
+                sigs.add(Instruction.SIGNALS["smimm_c"])
+            if mul_op.raddr_b.has_smimm():
+                sigs.add(Instruction.SIGNALS["smimm_d"])
 
         cond = ALUConditions(add_op.cond, mul_op.cond)
 
-        return 0 | sigs.pack() | cond.pack(sigs) | add_op.pack(raddr) | mul_op.pack(raddr) | raddr.pack()
+        return 0 | sigs.pack() | cond.pack(sigs) | add_op.pack() | mul_op.pack()
 
     def rotate(self: Self, dst: Any, src: Any, rot: Any, **kwargs: Any) -> None:
         sigs = Signals()
@@ -1269,10 +1465,6 @@ class SFUIntegrator(Register):
         return ALU(self.asm, self.op_name, dst, src, **kwargs)
 
 
-def _mov_a(asm: Assembly, dst: Any, src: Any, **kwargs: Any) -> ALU:
-    return ALU(asm, "bor", dst, src, src, **kwargs)
-
-
 def _rotate_a(asm: Assembly, *args: Any, **kwargs: Any) -> None:
     ALU(asm, "nop").rotate(*args, **kwargs)
 
@@ -1282,8 +1474,8 @@ def _quad_rotate_a(asm: Assembly, *args: Any, **kwargs: Any) -> None:
 
 
 _alias_regs: dict[str, Register] = {
-    "broadcast": Instruction.REGISTERS["r5rep"],
-    "quad_broadcast": Instruction.REGISTERS["r5"],
+    "broadcast": Instruction.REGISTERS["rep"],
+    "quad_broadcast": Instruction.REGISTERS["quad"],
 }
 
 
@@ -1342,13 +1534,12 @@ def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Any:
             else:
                 g[waddr] = reg
         g["rf"] = [Instruction.REGISTERS[f"rf{i}"] for i in range(64)]
-        g["mov"] = functools.partial(_mov_a, asm)
         g["rotate"] = functools.partial(_rotate_a, asm)
         g["quad_rotate"] = functools.partial(_quad_rotate_a, asm)
         for alias_name, alias_reg in _alias_regs.items():
             g[alias_name] = alias_reg
         for name, sig in Instruction.SIGNALS.items():
-            if name != "smimm":  # smimm signal is automatically derived
+            if not name.startswith("smimm_"):  # smimm signal is automatically derived
                 g[name] = sig
         result = func(asm, *args, **kwargs)
         g.clear()

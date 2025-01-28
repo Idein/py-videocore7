@@ -24,11 +24,28 @@ from typing import Final, Self
 
 from ioctl_opt import IOW, IOWR
 
+type c_uint32x7 = tuple[
+    c_uint32,
+    c_uint32,
+    c_uint32,
+    c_uint32,
+    c_uint32,
+    c_uint32,
+    c_uint32,
+]
 
-class DRM_V3D:
+type c_uint32x4 = tuple[
+    c_uint32,
+    c_uint32,
+    c_uint32,
+    c_uint32,
+]
+
+
+class DRM_V3D:  # noqa: N801
     fd: int | None
 
-    def __init__(self: Self, path: str = "/dev/dri/by-path/platform-fec00000.v3d-card") -> None:
+    def __init__(self: Self, path: str = "/dev/dri/card0") -> None:
         self.fd = os.open(path, os.O_RDWR)
 
     def close(self: Self) -> None:
@@ -76,58 +93,12 @@ class DRM_V3D:
             ("pad", c_uint32),
         ]
 
-        # NOTE: Since mypy treats the types of fields in _fields_ as Any,
-        # explicit getter and setter methods are defined to ensure proper type annotations.
-
-        @property
-        def handle(self: Self) -> c_uint32:
-            return self.handle
-
-        @handle.setter
-        def handle(self: Self, value: c_uint32) -> None:
-            self.handle = value
-
-        @property
-        def pad(self: Self) -> c_uint32:
-            return self.pad
-
-        @pad.setter
-        def pad(self: Self, value: c_uint32) -> None:
-            self.pad = value
-
     class _st_v3d_wait_bo(Structure):  # noqa: N801
         _fields_ = [
             ("handle", c_uint32),
             ("pad", c_uint32),
             ("timeout_ns", c_uint64),
         ]
-
-        # NOTE: Since mypy treats the types of fields in _fields_ as Any,
-        # explicit getter and setter methods are defined to ensure proper type annotations.
-
-        @property
-        def handle(self: Self) -> c_uint32:
-            return self.handle
-
-        @handle.setter
-        def handle(self: Self, value: c_uint32) -> None:
-            self.handle = value
-
-        @property
-        def pad(self: Self) -> c_uint32:
-            return self.pad
-
-        @pad.setter
-        def pad(self: Self, value: c_uint32) -> None:
-            self.pad = value
-
-        @property
-        def timeout_ns(self: Self) -> c_uint64:
-            return self.timeout_ns
-
-        @timeout_ns.setter
-        def timeout_ns(self: Self, value: c_uint64) -> None:
-            self.timeout_ns = value
 
     class _st_v3d_create_bo(Structure):  # noqa: N801
         _fields_ = [
@@ -137,41 +108,6 @@ class DRM_V3D:
             ("offset", c_uint32),
         ]
 
-        # NOTE: Since mypy treats the types of fields in _fields_ as Any,
-        # explicit getter and setter methods are defined to ensure proper type annotations.
-
-        @property
-        def size(self: Self) -> c_uint32:
-            return self.size
-
-        @size.setter
-        def size(self: Self, value: c_uint32) -> None:
-            self.size = value
-
-        @property
-        def flags(self: Self) -> c_uint32:
-            return self.flags
-
-        @flags.setter
-        def flags(self: Self, value: c_uint32) -> None:
-            self.flags = value
-
-        @property
-        def handle(self: Self) -> c_uint32:
-            return self.handle
-
-        @handle.setter
-        def handle(self: Self, value: c_uint32) -> None:
-            self.handle = value
-
-        @property
-        def offset(self: Self) -> c_uint32:
-            return self.offset
-
-        @offset.setter
-        def offset(self: Self, value: c_uint32) -> None:
-            self.offset = value
-
     class _st_v3d_mmap_bo(Structure):  # noqa: N801
         _fields_ = [
             ("handle", c_uint32),
@@ -179,83 +115,12 @@ class DRM_V3D:
             ("offset", c_uint64),
         ]
 
-        # NOTE: Since mypy treats the types of fields in _fields_ as Any,
-        # explicit getter and setter methods are defined to ensure proper type annotations.
-
-        @property
-        def handle(self: Self) -> c_uint32:
-            return self.handle
-
-        @handle.setter
-        def handle(self: Self, value: c_uint32) -> None:
-            self.handle = value
-
-        @property
-        def flags(self: Self) -> c_uint32:
-            return self.flags
-
-        @flags.setter
-        def flags(self: Self, value: c_uint32) -> None:
-            self.flags = value
-
-        @property
-        def offset(self: Self) -> c_uint64:
-            return self.offset
-
-        @offset.setter
-        def offset(self: Self, value: c_uint64) -> None:
-            self.offset = value
-
     class _st_v3d_get_param(Structure):  # noqa: N801
         _fields_ = [
             ("param", c_uint32),
             ("pad", c_uint32),
             ("value", c_uint64),
         ]
-
-        # NOTE: Since mypy treats the types of fields in _fields_ as Any,
-        # explicit getter and setter methods are defined to ensure proper type annotations.
-
-        @property
-        def param(self: Self) -> c_uint32:
-            return self.param
-
-        @param.setter
-        def param(self: Self, value: c_uint32) -> None:
-            self.param = value
-
-        @property
-        def pad(self: Self) -> c_uint32:
-            return self.pad
-
-        @pad.setter
-        def pad(self: Self, value: c_uint32) -> None:
-            self.pad = value
-
-        @property
-        def value(self: Self) -> c_uint64:
-            return self.value
-
-        @value.setter
-        def value(self: Self, value: c_uint64) -> None:
-            self.value = value
-
-    type c_uint32x7 = tuple[
-        c_uint32,
-        c_uint32,
-        c_uint32,
-        c_uint32,
-        c_uint32,
-        c_uint32,
-        c_uint32,
-    ]
-
-    type c_uint32x4 = tuple[
-        c_uint32,
-        c_uint32,
-        c_uint32,
-        c_uint32,
-    ]
 
     class _st_v3d_submit_csd(Structure):  # noqa: N801
         _fields_ = [
@@ -271,19 +136,19 @@ class DRM_V3D:
         # explicit getter and setter methods are defined to ensure proper type annotations.
 
         @property
-        def cfg(self: Self) -> "DRM_V3D".c_uint32x7:
+        def cfg(self: Self) -> c_uint32x7:
             return self.cfg
 
         @cfg.setter
-        def cfg(self: Self, value: "DRM_V3D".c_uint32x7) -> None:
+        def cfg(self: Self, value: c_uint32x7) -> None:
             self.cfg = value
 
         @property
-        def coef(self: Self) -> "DRM_V3D".c_uint32x4:
+        def coef(self: Self) -> c_uint32x4:
             return self.coef
 
         @coef.setter
-        def coef(self: Self, value: "DRM_V3D".c_uint32x4) -> None:
+        def coef(self: Self, value: c_uint32x4) -> None:
             self.coef = value
 
         @property
