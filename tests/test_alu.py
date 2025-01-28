@@ -71,6 +71,9 @@ ops: dict[str | None, Callable[..., Any]] = {
     "bxor": lambda a, b: a ^ b,
     "vadd": lambda a, b: a + b,
     "vsub": lambda a, b: a - b,
+    "rotquad": lambda a, b: np.hstack([np.roll(x, -int(y % 4)) for x, y in zip(a.reshape(4, 4), b[::4])]),
+    "rotfull": lambda a, b: np.roll(a, -int(b[0] % 16)),
+    "shuffle": lambda a, b: a[b % 16],
     # unary ops
     "fmov": lambda x: x,
     "fround": np.round,
@@ -162,6 +165,8 @@ def boilerplate_binary_ops(
     dst: tuple[type, list[str | None]],
     src1: tuple[type, list[str | None]],
     src2: tuple[type, list[str | None]],
+    domain1: tuple[Any, Any] | None = None,
+    domain2: tuple[Any, Any] | None = None,
 ) -> None:
     dst_dtype, dst_ops = dst
     src1_dtype, src1_ops = src1
@@ -176,16 +181,44 @@ def boilerplate_binary_ops(
         y: Array[Any] = drv.alloc((len(cases), 16 * 4 // np.dtype(dst_dtype).itemsize), dtype=dst_dtype)
         unif: Array[np.uint32] = drv.alloc(3, dtype="uint32")
 
-        if np.dtype(dst_dtype).name.startswith("float"):
-            x1[:] = np.random.uniform(-(2**7), 2**7, x1.shape).astype(src1_dtype)
-            x2[:] = np.random.uniform(-(2**7), 2**7, x2.shape).astype(src2_dtype)
-        elif any(np.dtype(dst_dtype).name.startswith(t) for t in ["int", "uint"]):
-            info1 = np.iinfo(src1_dtype)
-            info2 = np.iinfo(src2_dtype)
-            x1[:] = np.random.randint(info1.min, info1.max - 1, x1.shape, dtype=src1_dtype)
-            x2[:] = np.random.randint(info2.min, info2.max - 1, x2.shape, dtype=src2_dtype)
+        if domain1 is None:
+            if np.dtype(src1_dtype).name.startswith("float"):
+                domain1 = (-(2**7), 2**7)
+            else:
+                info1 = np.iinfo(src1_dtype)
+                domain1 = (info1.min, info1.max - int(not np.dtype(src1_dtype).name.startswith("float")))
+
+        if domain2 is None:
+            if np.dtype(src2_dtype).name.startswith("float"):
+                domain2 = (-(2**7), 2**7)
+            else:
+                info2 = np.iinfo(src2_dtype)
+                domain2 = (info2.min, info2.max - int(not np.dtype(src2_dtype).name.startswith("float")))
+
+        if domain1[0] == domain1[1]:
+            x1[:] = domain1[0]
+        elif domain1[0] < domain1[1]:
+            x1[:] = np.random.uniform(domain1[0], domain1[1], x1.shape).astype(src1_dtype)
         else:
-            assert False, "unreachable"
+            raise ValueError("Invalid domain")
+
+        if domain2[0] == domain2[1]:
+            x2[:] = domain2[0]
+        elif domain2[0] < domain2[1]:
+            x2[:] = np.random.uniform(domain2[0], domain2[1], x2.shape).astype(src2_dtype)
+        else:
+            raise ValueError("Invalid domain")
+
+        # if np.dtype(dst_dtype).name.startswith("float"):
+        #     x1[:] = np.random.uniform(-(2**7), 2**7, x1.shape).astype(src1_dtype)
+        #     x2[:] = np.random.uniform(-(2**7), 2**7, x2.shape).astype(src2_dtype)
+        # elif any(np.dtype(dst_dtype).name.startswith(t) for t in ["int", "uint"]):
+        #     info1 = np.iinfo(src1_dtype)
+        #     info2 = np.iinfo(src2_dtype)
+        #     x1[:] = np.random.randint(info1.min, info1.max - 1, x1.shape, dtype=src1_dtype)
+        #     x2[:] = np.random.randint(info2.min, info2.max - 1, x2.shape, dtype=src2_dtype)
+        # else:
+        #     assert False, "unreachable"
         y[:] = 0.0
 
         unif[0] = x1.addresses()[0]
@@ -264,33 +297,42 @@ def test_binary_ops() -> None:
 
     boilerplate_binary_ops(
         ["add", "sub", "imin", "imax", "asr"],
-        (np.int32, [None]),
-        (np.int32, [None]),
-        (np.int32, [None]),
+        (np.int32, [None, "none"]),
+        (np.int32, [None, "none"]),
+        (np.int32, [None, "none"]),
     )
     boilerplate_binary_ops(
         ["add", "sub", "umin", "umax"],
-        (np.uint32, [None]),
-        (np.uint32, [None]),
-        (np.uint32, [None]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
     )
     boilerplate_binary_ops(
         ["vadd", "vsub"],
-        (np.int16, [None]),
-        (np.int16, [None]),
-        (np.int16, [None]),
+        (np.int16, [None, "none"]),
+        (np.int16, [None, "none"]),
+        (np.int16, [None, "none"]),
     )
     boilerplate_binary_ops(
         ["shl", "shr", "ror"],
-        (np.uint32, [None]),
-        (np.uint32, [None]),
-        (np.uint32, [None]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
     )
     boilerplate_binary_ops(
         ["band", "bor", "bxor"],
-        (np.uint32, [None]),
-        (np.uint32, [None]),
-        (np.uint32, [None]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+    )
+
+    boilerplate_binary_ops(
+        ["rotquad", "rotfull", "shuffle"],
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+        domain1=(0, 1024),
+        domain2=(0, 15),
     )
 
 

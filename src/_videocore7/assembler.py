@@ -736,8 +736,8 @@ _add_ops: Final[dict[str, Operation]] = {
     "mov": Operation("mov", 249, True, True, False, raddr_mask=3),
     "v10pack": Operation("v10pack", 250, True, True, True),
     "v11fpack": Operation("v11fpack", 251, True, True, True),
-    "rotateq": Operation("rotateq", 252, True, True, True),
-    "rotate": Operation("rotate", 253, True, True, True),
+    "rotquad": Operation("rotquad", 252, True, True, True),
+    "rotfull": Operation("rotfull", 253, True, True, True),
     "shuffle": Operation("shuffle", 254, True, True, True),
 }
 
