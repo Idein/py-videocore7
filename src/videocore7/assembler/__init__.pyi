@@ -5,6 +5,7 @@ from _videocore7.assembler import ALU as ALU
 from _videocore7.assembler import Assembly as Assembly
 from _videocore7.assembler import Branch as Branch
 from _videocore7.assembler import Label as Label
+from _videocore7.assembler import Link as Link
 from _videocore7.assembler import LoopHelper
 from _videocore7.assembler import Reference as Reference
 from _videocore7.assembler import Register as Register
@@ -18,6 +19,7 @@ loop: LoopHelper
 L: Label
 R: Reference
 b: Callable[..., Branch]  # TODO: typing
+link: Link
 
 # Signals
 thrsw: Signal
