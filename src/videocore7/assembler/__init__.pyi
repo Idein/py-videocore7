@@ -1,10 +1,13 @@
+from collections.abc import Callable
 from typing import Any
 
 from _videocore7.assembler import ALU as ALU
 from _videocore7.assembler import Assembly as Assembly
+from _videocore7.assembler import Branch as Branch
+from _videocore7.assembler import Label as Label
 from _videocore7.assembler import LoopHelper
+from _videocore7.assembler import Reference as Reference
 from _videocore7.assembler import Register as Register
-from _videocore7.assembler import RotateSignal as RotateSignal
 from _videocore7.assembler import Signal as Signal
 from _videocore7.assembler import WriteSignal as WriteSignal
 from _videocore7.assembler import assemble as assemble
@@ -12,6 +15,9 @@ from _videocore7.assembler import qpu as qpu
 
 # Structured programming helpers
 loop: LoopHelper
+L: Label
+R: Reference
+b: Callable[..., Branch]  # TODO: typing
 
 # Signals
 thrsw: Signal
@@ -25,7 +31,6 @@ ldvpm: Signal
 ldtlb: WriteSignal
 ldtlbu: WriteSignal
 ucb: Signal
-rot: RotateSignal
 wrtmuc: Signal
 
 # Registers
