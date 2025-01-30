@@ -509,11 +509,11 @@ class Instruction:
         name: Register(name, 1, addr)
         for addr, name in enumerate(
             [
-                "_reserved_r0",  # Reserved on V3D 7.x
-                "_reserved_r1",  # Reserved on V3D 7.x
-                "_reserved_r2",  # Reserved on V3D 7.x
-                "_reserved_r3",  # Reserved on V3D 7.x
-                "_reserved_r4",  # Reserved on V3D 7.x
+                "",
+                "",
+                "",
+                "",
+                "",
                 "quad",
                 "null",
                 "tlb",
@@ -528,12 +528,12 @@ class Instruction:
                 "sync",
                 "syncu",
                 "syncb",
-                "_reserved_recip",  # Reserved on V3D 7.x
-                "_reserved_rsqrt",  # Reserved on V3D 7.x
-                "_reserved_exp",  # Reserved on V3D 7.x
-                "_reserved_log",  # Reserved on V3D 7.x
-                "_reserved_sin",  # Reserved on V3D 7.x
-                "_reserved_rsqrt2",  # Reserved on V3D 7.x
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
                 "",
                 "",
                 "",
@@ -1324,7 +1324,7 @@ class MulALUOp(ALUOp):
             if pack is None:
                 raise AssembleError(f'"{self.name}" requires dst as register with modifier from f32')
 
-            a_unpack = self.raddr_a.modifier.f32  # TODO: ここ要確認
+            a_unpack = self.raddr_a.modifier.f32
             if a_unpack is None:
                 raise AssembleError(f'"{self.name}" requires src as register with modifier to f32')
 
