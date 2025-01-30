@@ -70,6 +70,10 @@ tmuhsf: Register
 tmuhslod: Register
 rep: Register
 
+# Register Alias
+broadcast: Register  # rep
+quad_broadcast: Register  # quad
+
 rf: list[Register]
 rf0: Register
 rf1: Register
