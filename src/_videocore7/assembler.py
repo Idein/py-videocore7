@@ -333,6 +333,159 @@ class Signals(set[Signal]):
         return rot
 
 
+class TMULookUpConfig:
+    _per: int
+    _op: int
+    _type: int
+
+    @staticmethod
+    def default() -> int:
+        return TMULookUpConfig.to_int()
+
+    @staticmethod
+    def sequential_read_write_vec(n: int) -> int:
+        vecs = [
+            TMULookUpConfig(),
+            TMULookUpConfig().vec2,
+            TMULookUpConfig().vec3,
+            TMULookUpConfig().vec4,
+        ]
+        return TMULookUpConfig().to_int(vecs[:n])
+
+    @staticmethod
+    def to_int(configs: list["TMULookUpConfig"] = []) -> int:
+        if len(configs) > 4:
+            raise AssembleError("Too many TMU look-up configurations")
+        c = 0xFFFFFFFF
+        for config in configs:
+            c = ((c << 8) | int(config)) & 0xFFFFFFFF
+        return c
+
+    def __init__(self: Self, per: int = 1, op: int = 15, type: int = 7) -> None:
+        if per < 0 or 1 < per:
+            raise AssembleError("Invalid per")
+        if op < 0 or 15 < op:
+            raise AssembleError("Invalid op")
+        if type < 0 or 7 < type:
+            raise AssembleError("Invalid type")
+        self._per = per
+        self._op = op
+        self._type = type
+
+    def __int__(self: Self) -> int:
+        return (self._per << 7) | (self._op << 3) | (self._type)
+
+    @property
+    def quad(self: Self) -> Self:
+        self._per = 0
+        return self
+
+    @property
+    def pixel(self: Self) -> Self:
+        self._per = 1
+        return self
+
+    @property
+    def write_add_read_prefetch(self: Self) -> Self:
+        self._op = 0
+        return self
+
+    @property
+    def write_sub_read_clear(self: Self) -> Self:
+        self._op = 1
+        return self
+
+    @property
+    def write_xchg_read_flush(self: Self) -> Self:
+        self._op = 2
+        return self
+
+    @property
+    def write_cmpxchg_read_flush(self: Self) -> Self:
+        self._op = 3
+        return self
+
+    @property
+    def write_umin_full_l1_clear(self: Self) -> Self:
+        self._op = 4
+        return self
+
+    @property
+    def write_umax(self: Self) -> Self:
+        self._op = 5
+        return self
+
+    @property
+    def write_smin(self: Self) -> Self:
+        self._op = 6
+        return self
+
+    @property
+    def write_smax(self: Self) -> Self:
+        self._op = 7
+        return self
+
+    @property
+    def write_and_read_inc(self: Self) -> Self:
+        self._op = 8
+        return self
+
+    @property
+    def write_or_read_dec(self: Self) -> Self:
+        self._op = 9
+        return self
+
+    @property
+    def write_xor_read_not(self: Self) -> Self:
+        self._op = 10
+        return self
+
+    @property
+    def regular(self: Self) -> Self:
+        self._op = 15
+        return self
+
+    @property
+    def int8(self: Self) -> Self:
+        self._type = 0
+        return self
+
+    @property
+    def int16(self: Self) -> Self:
+        self._type = 1
+        return self
+
+    @property
+    def vec2(self: Self) -> Self:
+        self._type = 2
+        return self
+
+    @property
+    def vec3(self: Self) -> Self:
+        self._type = 3
+        return self
+
+    @property
+    def vec4(self: Self) -> Self:
+        self._type = 4
+        return self
+
+    @property
+    def uint8(self: Self) -> Self:
+        self._type = 5
+        return self
+
+    @property
+    def uint16(self: Self) -> Self:
+        self._type = 6
+        return self
+
+    @property
+    def uint32(self: Self) -> Self:
+        self._type = 7
+        return self
+
+
 class Instruction:
     SIGNALS: dict[str, Signal | WriteSignal] = {
         "thrsw": Signal("thrsw"),
