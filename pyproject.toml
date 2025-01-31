@@ -39,7 +39,7 @@ max-line-length = 119
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "D"] # __init__.pyは未使用インポートとドキュメントを無視
 "tests/test_*.py" = ["D"] # テストファイルはドキュメントを無視
-"example/*.py" = ["D"] # exampleファイルはドキュメントを無視
+"examples/*.py" = ["D"] # exampleファイルはドキュメントを無視
 
 [dependency-groups]
 dev = [
