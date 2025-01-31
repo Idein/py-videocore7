@@ -1,0 +1,212 @@
+# Copyright (c) 2025- Idein Inc.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice (including the next
+# paragraph) shall be included in all copies or substantial portions of the
+# Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+from collections.abc import Callable
+from time import monotonic
+
+import numpy as np
+
+from videocore7.assembler import *
+from videocore7.assembler import Assembly, qpu
+from videocore7.driver import Array, Driver
+
+
+@qpu
+def qpu_scopy(
+    asm: Assembly,
+    *,
+    num_qpus: int,
+    unroll_shift: int,
+    code_offset: int,
+    align_cond: Callable[[int], bool] = lambda pos: pos % 512 == 259,
+) -> None:
+    reg_length = rf[5]
+    reg_src = rf[6]
+    reg_dst = rf[7]
+    reg_qpu_num = rf[8]
+    reg_stride = rf[9]
+
+    nop(sig=ldunifrf(reg_length))
+    nop(sig=ldunifrf(reg_src))
+    nop(sig=ldunifrf(reg_dst))
+
+    if num_qpus == 1:
+        num_qpus_shift = 0
+        mov(reg_qpu_num, 0)
+    elif num_qpus == 12:
+        num_qpus_shift = 3
+        tidx(rf1)
+        shr(rf1, rf1, 2)
+        band(reg_qpu_num, rf1, 0b1111)
+    else:
+        raise Exception("num_qpus must be 1 or 12")
+
+    # addr += 4 * 4 * (thread_num + 16 * qpu_num)
+    shl(rf1, reg_qpu_num, 4)
+    eidx(rf2)
+    add(rf1, rf1, rf2)
+    shl(rf1, rf1, 4)
+    add(reg_src, reg_src, rf1).add(reg_dst, reg_dst, rf1)
+
+    # stride = 4 * 4 * 16 * num_qpus
+    mov(reg_stride, 1)
+    shl(reg_stride, reg_stride, 8 + num_qpus_shift)
+
+    num_shifts = [*range(16), *range(-16, 0)]
+
+    # length /= 16 * 8 * num_qpus * unroll
+    shr(reg_length, reg_length, num_shifts[7 + num_qpus_shift + unroll_shift])
+
+    # This single thread switch and two nops just before the loop are really
+    # important for TMU read to achieve a better performance.
+    # This also enables TMU read requests without the thread switch signal, and
+    # the eight-depth TMU read request queue.
+    nop(sig=thrsw)
+    nop()
+    nop()
+
+    while not align_cond(code_offset + len(asm)):
+        nop()
+
+    with loop as l:  # noqa: E741
+        unroll = 1 << unroll_shift
+
+        # A smaller number of instructions does not necessarily mean a faster
+        # operation.  Rather, complicated TMU manipulations may perform worse
+        # and even cause a hardware bug.
+
+        mov(tmuau, reg_src).add(reg_src, reg_src, reg_stride)
+        mov(tmua, reg_src).add(reg_src, reg_src, reg_stride)
+
+        for i in range(unroll - 1):
+            nop(sig=ldtmu(rf1))
+            mov(tmud, rf1, sig=ldtmu(rf1))
+            mov(tmud, rf1, sig=ldtmu(rf1))
+            mov(tmud, rf1)
+            nop(sig=ldtmu(rf1))
+            mov(tmud, rf1)
+            mov(tmua, reg_dst).add(reg_dst, reg_dst, reg_stride)
+            mov(tmua, reg_src).add(reg_src, reg_src, reg_stride)
+            nop(sig=ldtmu(rf1))
+            mov(tmud, rf1, sig=ldtmu(rf1))
+            mov(tmud, rf1, sig=ldtmu(rf1))
+            mov(tmud, rf1)
+            nop(sig=ldtmu(rf1))
+            mov(tmud, rf1)
+            mov(tmuau, reg_dst).add(reg_dst, reg_dst, reg_stride)
+            mov(tmua, reg_src).add(reg_src, reg_src, reg_stride)
+
+        if unroll == 1:
+            # Prefetch the next source.
+            mov(tmua, reg_src)
+
+        nop(sig=ldtmu(rf1))
+        mov(tmud, rf1, sig=ldtmu(rf1))
+        mov(tmud, rf1, sig=ldtmu(rf1))
+        mov(tmud, rf1)
+        nop(sig=ldtmu(rf1))
+        sub(reg_length, reg_length, 1, cond="pushz").mov(tmud, rf1)
+        mov(tmua, reg_dst).add(reg_dst, reg_dst, reg_stride)
+
+        if unroll == 1:
+            mov(tmuc, 0xFFFFFFFC)
+        nop(sig=ldtmu(rf1))
+        mov(tmud, rf1, sig=ldtmu(rf1))
+        mov(tmud, rf1, sig=ldtmu(rf1))
+
+        l.b(cond="na0").unif_addr(absolute=False)
+        mov(tmud, rf1, sig=ldtmu(rf1))
+        mov(tmud, rf1)
+        mov(tmua, reg_dst).add(reg_dst, reg_dst, reg_stride)
+
+    # This synchronization is needed between the last TMU operation and the
+    # program end with the thread switch just before the loop above.
+    barrierid(syncb, sig=thrsw)
+    nop()
+    nop()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+def scopy(*, length: int, num_qpus: int = 12, unroll_shift: int = 0) -> None:
+    assert length > 0
+    assert length % (16 * 8 * num_qpus * (1 << unroll_shift)) == 0
+
+    print(f"==== QPU {num_qpus} thread{'s'[: num_qpus - 1]} scopy example ({length / 1024 / 1024} Mi elements) ====")
+
+    with Driver(data_area_size=(length * 2 + 1024) * 4) as drv:
+        code = drv.program(qpu_scopy, num_qpus=num_qpus, unroll_shift=unroll_shift, code_offset=drv.code_pos // 8)
+
+        print("Preparing for buffers...")
+
+        x: Array[np.uint32] = drv.alloc(length, dtype=np.uint32)
+        y: Array[np.uint32] = drv.alloc(length, dtype=np.uint32)
+
+        x[:] = np.arange(*x.shape, dtype=x.dtype)
+        y[:] = -x
+
+        assert not np.array_equal(x, y)
+
+        unif: Array[np.uint32] = drv.alloc(3 + (1 << unroll_shift) + 1, dtype=np.uint32)
+        unif[0] = length
+        unif[1] = x.addresses()[0]
+        unif[2] = y.addresses()[0]
+        if unroll_shift == 0:
+            unif[3] = 0xFC80FCFC
+        else:
+            unif[3:-1] = 0xFCFCFCFC
+        unif[-1] = 4 * (-len(unif) + 3) & 0xFFFFFFFF
+
+        print("Executing on QPU...")
+
+        start = monotonic()
+        drv.execute(code, unif.addresses()[0], thread=num_qpus)
+        end = monotonic()
+
+        assert np.array_equal(x, y)
+
+        print(f"{end - start} sec, {length * 4 / (end - start) * 1e-6} MB/s")
+
+
+def cpu_scopy(length: int) -> None:
+    print(f"==== CPU scopy example ({length / 1024 / 1024} Mi elements) ====")
+    x = np.empty(length, dtype=np.uint32)
+    start = monotonic()
+    _ = x.copy()
+    end = monotonic()
+    print(f"{end - start} sec, {length * 4 / (end - start) * 1e-6} MB/s")
+
+
+def main() -> None:
+    length = 24 * 1024 * 1024
+    cpu_scopy(length)
+    scopy(num_qpus=1, length=length)
+    scopy(num_qpus=12, length=length)
+
+
+if __name__ == "__main__":
+    main()
