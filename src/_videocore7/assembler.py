@@ -598,10 +598,10 @@ class Instruction:
     for i in range(64):
         REGISTERS[f"rf{i}"] = Register(f"rf{i}", 0, i)
 
-    serial: int
+    _serial: int
 
     def __init__(self: Self, asm: Assembly) -> None:
-        self.serial = len(asm)
+        self._serial = len(asm)
         asm.append(self)
 
     def __int__(self: Self) -> int:
@@ -609,6 +609,10 @@ class Instruction:
 
     def pack(self: Self) -> int:
         assert False, "Bug: Not implemented"
+
+    @property
+    def serial(self: Self) -> int:
+        return self._serial
 
 
 class ALUConditions:
