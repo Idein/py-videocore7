@@ -88,16 +88,16 @@ class LabelNameSpace:
 
 
 class Label:
-    asm: Assembly
+    _asm: Assembly
 
     def __init__(self: Self, asm: Assembly) -> None:
-        self.asm = asm
+        self._asm = asm
 
     def __getattr__(self: Self, name: str) -> None:
-        ns_name = self.asm.gen_ns_label_name(name)
-        if ns_name in self.asm.labels:
+        ns_name = self._asm.gen_ns_label_name(name)
+        if ns_name in self._asm.labels:
             raise AssembleError(f"Label is duplicated: {name}")
-        self.asm.labels[ns_name] = len(self.asm)
+        self._asm.labels[ns_name] = len(self._asm)
 
 
 class Reference:
