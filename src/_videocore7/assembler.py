@@ -67,15 +67,15 @@ class Assembly(list["Instruction"]):
 class LabelNameSpace:
     """Label namespace controller."""
 
-    asm: Assembly
-    name: str
+    _asm: Assembly
+    _name: str
 
     def __init__(self: Self, asm: Assembly, name: str) -> None:
-        self.asm = asm
-        self.name = name
+        self._asm = asm
+        self._name = name
 
     def __enter__(self: Self) -> Self:
-        self.asm.label_name_spaces.append(self.name)
+        self._asm.label_name_spaces.append(self._name)
         return self
 
     def __exit__(
@@ -84,7 +84,7 @@ class LabelNameSpace:
         exc_value: BaseException | None,
         traceback: type[TracebackType] | None,
     ) -> None:
-        self.asm.label_name_spaces.pop()
+        self._asm.label_name_spaces.pop()
 
 
 class Label:
