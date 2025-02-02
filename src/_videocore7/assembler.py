@@ -205,11 +205,11 @@ class Register:
         "ih": InputUnpackModifier("ih", i32=4),  # Convert high 16 bits from 16-bit integer to signed 32-bit int
     }
 
-    name: str
-    magic: int
-    waddr: int
-    unpack_modifier: InputUnpackModifier
-    pack_modifier: OutputPackModifier
+    _name: str
+    _magic: int
+    _waddr: int
+    _unpack_modifier: InputUnpackModifier
+    _pack_modifier: OutputPackModifier
 
     def __init__(
         self: Self,
@@ -219,21 +219,41 @@ class Register:
         pack: str = "none",
         unpack: str = "none",
     ) -> None:
-        self.name = name
-        self.magic = magic
-        self.waddr = waddr
-        self.pack_modifier = Register.OUTPUT_MODIFIER[pack]
-        self.unpack_modifier = Register.INPUT_MODIFIER[unpack]
+        self._name = name
+        self._magic = magic
+        self._waddr = waddr
+        self._pack_modifier = Register.OUTPUT_MODIFIER[pack]
+        self._unpack_modifier = Register.INPUT_MODIFIER[unpack]
 
     def pack(self: Self, modifier: str) -> "Register":
-        if self.pack_modifier != Register.OUTPUT_MODIFIER["none"]:
+        if self._pack_modifier != Register.OUTPUT_MODIFIER["none"]:
             raise AssembleError("Conflict pack")
-        return Register(self.name, self.magic, self.waddr, pack=modifier)
+        return Register(self._name, self._magic, self._waddr, pack=modifier)
 
     def unpack(self: Self, modifier: str) -> "Register":
-        if self.unpack_modifier != Register.INPUT_MODIFIER["none"]:
+        if self._unpack_modifier != Register.INPUT_MODIFIER["none"]:
             raise AssembleError("Conflict unpack")
-        return Register(self.name, self.magic, self.waddr, unpack=modifier)
+        return Register(self._name, self._magic, self._waddr, unpack=modifier)
+
+    @property
+    def name(self: Self) -> str:
+        return self._name
+
+    @property
+    def magic(self: Self) -> int:
+        return self._magic
+
+    @property
+    def waddr(self: Self) -> int:
+        return self._waddr
+
+    @property
+    def unpack_modifier(self: Self) -> InputUnpackModifier:
+        return self._unpack_modifier
+
+    @property
+    def pack_modifier(self: Self) -> OutputPackModifier:
+        return self._pack_modifier
 
 
 class Signal:
