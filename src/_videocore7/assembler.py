@@ -278,7 +278,7 @@ class Signal:
         return self._dst
 
 
-class WriteSignal:
+class LoadSignal:
     _name: str
 
     def __init__(self: Self, name: str) -> None:
@@ -292,8 +292,8 @@ class Signals(set[Signal]):
     def __init__(self: Self) -> None:
         super().__init__()
 
-    def add(self: Self, sigs: WriteSignal | Signal | Iterable[WriteSignal | Signal]) -> None:
-        if isinstance(sigs, WriteSignal):
+    def add(self: Self, sigs: LoadSignal | Signal | Iterable[LoadSignal | Signal]) -> None:
+        if isinstance(sigs, LoadSignal):
             wsig = sigs
             raise AssembleError(f'"{wsig._name}" requires destination register (ex. "{wsig._name}(r0)")')
         elif isinstance(sigs, Signal):
@@ -506,16 +506,16 @@ class TMULookUpConfig:
 
 
 class Instruction:
-    SIGNALS: dict[str, Signal | WriteSignal] = {
+    SIGNALS: dict[str, Signal | LoadSignal] = {
         "thrsw": Signal("thrsw"),
         "ldunif": Signal("ldunif"),
         "ldunifa": Signal("ldunifa"),
-        "ldunifrf": WriteSignal("ldunifrf"),
-        "ldunifarf": WriteSignal("ldunifarf"),
-        "ldtmu": WriteSignal("ldtmu"),
-        "ldvary": WriteSignal("ldvary"),
-        "ldtlb": WriteSignal("ldtlb"),
-        "ldtlbu": WriteSignal("ldtlbu"),
+        "ldunifrf": LoadSignal("ldunifrf"),
+        "ldunifarf": LoadSignal("ldunifarf"),
+        "ldtmu": LoadSignal("ldtmu"),
+        "ldvary": LoadSignal("ldvary"),
+        "ldtlb": LoadSignal("ldtlb"),
+        "ldtlbu": LoadSignal("ldtlbu"),
         "ucb": Signal("ucb"),
         "wrtmuc": Signal("wrtmuc"),
         "smimm_a": Signal("smimm_a"),
