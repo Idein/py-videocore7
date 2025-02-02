@@ -33,18 +33,18 @@ class AssembleError(Exception):
 
 
 class Assembly(list["Instruction"]):
-    labels: dict[str, int]
-    label_name_spaces: list[str]
+    _labels: dict[str, int]
+    _label_name_spaces: list[str]
 
     def __init__(self: Self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        self.labels = {}
-        self.label_name_spaces = []
+        self._labels = {}
+        self._label_name_spaces = []
 
     def gen_unused_label(self: Self, label_format: str = "{}") -> str:
         n: int = 0
         label = label_format.format(n)
-        while self.gen_ns_label_name(label) in self.labels:
+        while self.gen_ns_label_name(label) in self._labels:
             n += 1
             next_label = label_format.format(n)
             assert label != next_label, "Bug: Invalid label format"
@@ -53,7 +53,15 @@ class Assembly(list["Instruction"]):
         return label_format.format(n)
 
     def gen_ns_label_name(self: Self, name: str) -> str:
-        return ".".join(self.label_name_spaces + [name])
+        return ".".join(self._label_name_spaces + [name])
+
+    @property
+    def labels(self: Self) -> dict[str, int]:
+        return self._labels
+
+    @property
+    def label_name_spaces(self: Self) -> list[str]:
+        return self._label_name_spaces
 
 
 class LabelNameSpace:
