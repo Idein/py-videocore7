@@ -101,20 +101,27 @@ class Label:
 
 
 class Reference:
-    asm: Assembly
-    name: str | None
+    _asm: Assembly
+    _name: str | None
 
     def __init__(self: Self, asm: Assembly, name: str | None = None) -> None:
-        self.asm = asm
-        self.name = self.asm.gen_ns_label_name(name) if name is not None else None
-
-    def __getattr__(self: Self, name: str) -> "Reference":
-        return Reference(self.asm, name)
+        self._asm = asm
+        self._name = self._asm.gen_ns_label_name(name) if name is not None else None
 
     def __int__(self: Self) -> int:
-        if self.name is None:
+        if self._name is None:
             raise AssembleError("Reference name is not specified")
-        return self.asm.labels[self.name]
+        return self._asm.labels[self._name]
+
+
+class ReferenceHelper:
+    _asm: Assembly
+
+    def __init__(self: Self, asm: Assembly) -> None:
+        self._asm = asm
+
+    def __getattr__(self: Self, name: str) -> Reference:
+        return Reference(self._asm, name)
 
 
 class OutputPackModifier:
@@ -1629,7 +1636,7 @@ def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Any:
         g = func.__globals__
         g_orig = g.copy()
         g["L"] = Label(asm)
-        g["R"] = Reference(asm)
+        g["R"] = ReferenceHelper(asm)
         g["loop"] = LoopHelper(asm)
         g["b"] = functools.partial(Branch, asm, "b")
         g["link"] = Link()
