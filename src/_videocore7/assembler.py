@@ -259,27 +259,15 @@ class Register:
 class Signal:
     name: str
     dst: Register | None
-    rot: int | Register | None
 
-    def __init__(self: Self, name: str, dst: Register | None = None, rot: int | None = None) -> None:
+    def __init__(self: Self, name: str, dst: Register | None = None) -> None:
         self.name = name
         self.dst = dst
-        self.rot = rot
 
     @property
     def is_write(self: Self) -> bool:
         """Write (to destination register) signal."""
         return self.dst is not None
-
-    @property
-    def is_rotate(self: Self) -> bool:
-        return self.rot is not None
-
-    @property
-    def rotate_count(self: Self) -> int | Register:
-        if self.rot is None:
-            raise AssembleError("Rotate count is not specified")
-        return self.rot
 
 
 class WriteSignal:
@@ -304,8 +292,6 @@ class Signals(set[Signal]):
             ssig = sigs
             if ssig.name in [s.name for s in self]:
                 raise AssembleError(f'Signal "{ssig.name}" is duplicated')
-            if ssig.rot == 0:  # ignore rot(0)
-                return
             super().add(ssig)
             if len([s.dst for s in self if s.dst is not None]) > 1:
                 raise AssembleError("Too many signals that require destination register")
@@ -356,16 +342,6 @@ class Signals(set[Signal]):
         assert self.is_write
         dst = [sig.dst for sig in self if sig.dst is not None][0]
         return (dst.magic << 6) | dst.waddr
-
-    @property
-    def is_rotate(self: Self) -> bool:
-        return any(sig.is_rotate for sig in self)
-
-    @property
-    def rotate_count(self: Self) -> int | Register:
-        assert self.is_rotate
-        rot = [sig.rot for sig in self if sig.rot is not None][0]
-        return rot
 
 
 class TMULookUpConfig:
@@ -708,9 +684,9 @@ class ALUConditions:
 
 
 class ALURaddr:
-    _addr: Final[int | float | Register | Signal]
+    _addr: Final[int | float | Register]
 
-    def __init__(self: Self, addr: int | float | Register | Signal) -> None:
+    def __init__(self: Self, addr: int | float | Register) -> None:
         self._addr = addr
 
     def has_smimm(self: Self) -> bool:
@@ -748,11 +724,6 @@ class ALURaddr:
             raddr = pack_smimms_float(self._addr)
         elif isinstance(self._addr, Register):
             raddr = self._addr.waddr
-        elif isinstance(self._addr, Signal):
-            if isinstance(self._addr.rot, int):
-                raddr = pack_smimms_int(self._addr.rot)
-            if isinstance(self._addr.rot, Register):
-                raddr = 0
 
         return raddr
 
@@ -1468,15 +1439,14 @@ class ALU(Instruction):
         sigs.add(add_op.sigs)
         sigs.add(mul_op.sigs)
 
-        if not sigs.is_rotate:
-            if add_op.raddr_a.has_smimm():
-                sigs.add(Instruction.SIGNALS["smimm_a"])
-            if add_op.raddr_b.has_smimm():
-                sigs.add(Instruction.SIGNALS["smimm_b"])
-            if mul_op.raddr_a.has_smimm():
-                sigs.add(Instruction.SIGNALS["smimm_c"])
-            if mul_op.raddr_b.has_smimm():
-                sigs.add(Instruction.SIGNALS["smimm_d"])
+        if add_op.raddr_a.has_smimm():
+            sigs.add(Instruction.SIGNALS["smimm_a"])
+        if add_op.raddr_b.has_smimm():
+            sigs.add(Instruction.SIGNALS["smimm_b"])
+        if mul_op.raddr_a.has_smimm():
+            sigs.add(Instruction.SIGNALS["smimm_c"])
+        if mul_op.raddr_b.has_smimm():
+            sigs.add(Instruction.SIGNALS["smimm_d"])
 
         cond = ALUConditions(add_op.cond, mul_op.cond)
 
