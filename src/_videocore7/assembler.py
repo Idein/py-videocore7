@@ -274,7 +274,8 @@ class Signal:
         return self._name
 
     @property
-    def dst(self: Self) -> Register | None:
+    def dst(self: Self) -> Register:
+        assert self._dst is not None
         return self._dst
 
 
@@ -287,30 +288,34 @@ class LoadSignal:
     def __call__(self: Self, dst: Register) -> Signal:
         return Signal(self._name, dst=dst)
 
+    @property
+    def name(self: Self) -> str:
+        return self._name
+
 
 class Signals(set[Signal]):
     def __init__(self: Self) -> None:
         super().__init__()
 
     def add(self: Self, sigs: LoadSignal | Signal | Iterable[LoadSignal | Signal]) -> None:
-        if isinstance(sigs, LoadSignal):
-            wsig = sigs
-            raise AssembleError(f'"{wsig._name}" requires destination register (ex. "{wsig._name}(r0)")')
-        elif isinstance(sigs, Signal):
-            ssig = sigs
-            if ssig.name in [s.name for s in self]:
-                raise AssembleError(f'Signal "{ssig.name}" is duplicated')
-            super().add(ssig)
-            if len([s.dst for s in self if s.dst is not None]) > 1:
-                raise AssembleError("Too many signals that require destination register")
-        elif isinstance(sigs, Iterable):
-            for sig in sigs:
-                self.add(sig)
-        else:
-            raise AssembleError("Invalid signal object")
+        match sigs:
+            case LoadSignal() as ldsignal:
+                raise AssembleError(f'"{ldsignal.name}" requires destination register (ex. "{ldsignal.name}(r0)")')
+            case Signal() as signal:
+                if signal.name in [s.name for s in self]:
+                    raise AssembleError(f'Signal "{signal.name}" is duplicated')
+                super().add(signal)
+                if len([s for s in self if s.is_load]) > 1:
+                    raise AssembleError("Too many signals that require destination register")
+            case Iterable() as sigs:
+                for sig in sigs:
+                    self.add(sig)
+            case _:
+                raise RuntimeError("unreachable")
 
     def pack(self: Self) -> int:
-        return {
+        sigset = frozenset([sig.name for sig in self])
+        valid_sigset = {
             frozenset(): 0,
             frozenset(["thrsw"]): 1,
             frozenset(["ldunif"]): 2,
@@ -339,16 +344,19 @@ class Signals(set[Signal]):
             frozenset(["ldunifarf"]): 25,
             frozenset(["smimm_c"]): 30,
             frozenset(["smimm_d"]): 31,
-        }[frozenset([sig.name for sig in self])] << 53
+        }
+        if sigset in valid_sigset:
+            return valid_sigset[sigset] << 53
+        raise AssembleError(f"Invalid signal set: {sigset}")
 
     @property
-    def is_write(self: Self) -> bool:
+    def is_load(self: Self) -> bool:
         return any(sig.is_load for sig in self)
 
     @property
     def write_address(self: Self) -> int:
-        assert self.is_write
-        dst = [sig.dst for sig in self if sig.dst is not None][0]
+        assert self.is_load
+        dst = [sig.dst for sig in self if sig.is_load][0]
         return (dst.magic << 6) | dst.waddr
 
 
@@ -612,7 +620,7 @@ class ALUConditions:
         self.cond_mul = cond_mul
 
     def pack(self: Self, sigs: Signals) -> int:
-        if sigs.is_write:
+        if sigs.is_load:
             if self.cond_add is not None:
                 raise AssembleError(f'Conflict conditional flags "{self.cond_add}" and write signal')
             if self.cond_mul is not None:
