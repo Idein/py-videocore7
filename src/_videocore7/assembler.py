@@ -257,17 +257,25 @@ class Register:
 
 
 class Signal:
-    name: str
-    dst: Register | None
+    _name: str
+    _dst: Register | None
 
     def __init__(self: Self, name: str, dst: Register | None = None) -> None:
-        self.name = name
-        self.dst = dst
+        self._name = name
+        self._dst = dst
 
     @property
     def is_write(self: Self) -> bool:
         """Write (to destination register) signal."""
-        return self.dst is not None
+        return self._dst is not None
+
+    @property
+    def name(self: Self) -> str:
+        return self._name
+
+    @property
+    def dst(self: Self) -> Register | None:
+        return self._dst
 
 
 class WriteSignal:
