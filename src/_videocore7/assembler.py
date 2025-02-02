@@ -616,19 +616,19 @@ class Instruction:
 
 
 class ALUConditions:
-    cond_add: str | None
-    cond_mul: str | None
+    _cond_add: str | None
+    _cond_mul: str | None
 
     def __init__(self: Self, cond_add: str | None, cond_mul: str | None) -> None:
-        self.cond_add = cond_add
-        self.cond_mul = cond_mul
+        self._cond_add = cond_add
+        self._cond_mul = cond_mul
 
     def pack(self: Self, sigs: Signals) -> int:
         if sigs.is_load:
-            if self.cond_add is not None:
-                raise AssembleError(f'Conflict conditional flags "{self.cond_add}" and write signal')
-            if self.cond_mul is not None:
-                raise AssembleError(f'Conflict conditional flags "{self.cond_mul}" and write signal')
+            if self._cond_add is not None:
+                raise AssembleError(f'Conflict conditional flags "{self._cond_add}" and load signal')
+            if self._cond_mul is not None:
+                raise AssembleError(f'Conflict conditional flags "{self._cond_mul}" and load signal')
             return sigs.write_address << 46
 
         conds_push = {
@@ -657,13 +657,13 @@ class ALUConditions:
             "ifnb": 3,
         }
 
-        add_insn = 1 * int(self.cond_add in conds_insn.keys())
-        add_push = 2 * int(self.cond_add in conds_push.keys())
-        add_update = 3 * int(self.cond_add in conds_update.keys())
+        add_insn = 1 * int(self._cond_add in conds_insn.keys())
+        add_push = 2 * int(self._cond_add in conds_push.keys())
+        add_update = 3 * int(self._cond_add in conds_update.keys())
 
-        mul_insn = 1 * int(self.cond_mul in conds_insn.keys())
-        mul_push = 2 * int(self.cond_mul in conds_push.keys())
-        mul_update = 3 * int(self.cond_mul in conds_update.keys())
+        mul_insn = 1 * int(self._cond_mul in conds_insn.keys())
+        mul_push = 2 * int(self._cond_mul in conds_push.keys())
+        mul_update = 3 * int(self._cond_mul in conds_update.keys())
 
         add_cond = add_insn + add_push + add_update
         mul_cond = mul_insn + mul_push + mul_update
@@ -679,26 +679,26 @@ class ALUConditions:
         result = result[mul_cond][add_cond]
 
         if result is None:
-            raise AssembleError(f'Conflict conditional flags "{self.cond_add}" and "{self.cond_mul}"')
+            raise AssembleError(f'Conflict conditional flags "{self._cond_add}" and "{self._cond_mul}"')
 
-        if add_push > 0 and self.cond_add is not None:
-            result |= conds_push[self.cond_add]
-        if mul_push > 0 and self.cond_mul is not None:
-            result |= conds_push[self.cond_mul]
-        if add_update > 0 and self.cond_add is not None:
-            result |= conds_update[self.cond_add]
-        if mul_update > 0 and self.cond_mul is not None:
-            result |= conds_update[self.cond_mul]
-        if mul_insn > 0 and self.cond_mul is not None:
-            if add_insn > 0 and self.cond_add is not None:
-                result |= conds_insn[self.cond_mul] << 4
-                result |= conds_insn[self.cond_add]
+        if add_push > 0 and self._cond_add is not None:
+            result |= conds_push[self._cond_add]
+        if mul_push > 0 and self._cond_mul is not None:
+            result |= conds_push[self._cond_mul]
+        if add_update > 0 and self._cond_add is not None:
+            result |= conds_update[self._cond_add]
+        if mul_update > 0 and self._cond_mul is not None:
+            result |= conds_update[self._cond_mul]
+        if mul_insn > 0 and self._cond_mul is not None:
+            if add_insn > 0 and self._cond_add is not None:
+                result |= conds_insn[self._cond_mul] << 4
+                result |= conds_insn[self._cond_add]
             elif add_update > 0:
-                result |= conds_insn[self.cond_mul] << 4
+                result |= conds_insn[self._cond_mul] << 4
             else:
-                result |= conds_insn[self.cond_mul] << 2
-        elif add_insn > 0 and self.cond_add is not None:
-            result |= conds_insn[self.cond_add] << 2
+                result |= conds_insn[self._cond_mul] << 2
+        elif add_insn > 0 and self._cond_add is not None:
+            result |= conds_insn[self._cond_add] << 2
 
         return result << 46
 
