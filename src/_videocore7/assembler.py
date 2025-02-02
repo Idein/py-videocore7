@@ -279,13 +279,13 @@ class Signal:
 
 
 class WriteSignal:
-    name: str
+    _name: str
 
     def __init__(self: Self, name: str) -> None:
-        self.name = name
+        self._name = name
 
     def __call__(self: Self, dst: Register) -> Signal:
-        return Signal(self.name, dst=dst)
+        return Signal(self._name, dst=dst)
 
 
 class Signals(set[Signal]):
@@ -295,7 +295,7 @@ class Signals(set[Signal]):
     def add(self: Self, sigs: WriteSignal | Signal | Iterable[WriteSignal | Signal]) -> None:
         if isinstance(sigs, WriteSignal):
             wsig = sigs
-            raise AssembleError(f'"{wsig.name}" requires destination register (ex. "{wsig.name}(r0)")')
+            raise AssembleError(f'"{wsig._name}" requires destination register (ex. "{wsig._name}(r0)")')
         elif isinstance(sigs, Signal):
             ssig = sigs
             if ssig.name in [s.name for s in self]:
