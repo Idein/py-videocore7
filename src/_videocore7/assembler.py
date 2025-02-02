@@ -41,10 +41,10 @@ class Assembly(list["Instruction"]):
         self.labels = {}
         self.label_name_spaces = []
 
-    def _gen_unused_label(self: Self, label_format: str = "{}") -> str:
-        n = 0
+    def gen_unused_label(self: Self, label_format: str = "{}") -> str:
+        n: int = 0
         label = label_format.format(n)
-        while self._gen_ns_label_name(label) in self.labels:
+        while self.gen_ns_label_name(label) in self.labels:
             n += 1
             next_label = label_format.format(n)
             assert label != next_label, "Bug: Invalid label format"
@@ -52,7 +52,7 @@ class Assembly(list["Instruction"]):
 
         return label_format.format(n)
 
-    def _gen_ns_label_name(self: Self, name: str) -> str:
+    def gen_ns_label_name(self: Self, name: str) -> str:
         return ".".join(self.label_name_spaces + [name])
 
 
@@ -86,7 +86,7 @@ class Label:
         self.asm = asm
 
     def __getattr__(self: Self, name: str) -> None:
-        ns_name = self.asm._gen_ns_label_name(name)
+        ns_name = self.asm.gen_ns_label_name(name)
         if ns_name in self.asm.labels:
             raise AssembleError(f"Label is duplicated: {name}")
         self.asm.labels[ns_name] = len(self.asm)
@@ -98,7 +98,7 @@ class Reference:
 
     def __init__(self: Self, asm: Assembly, name: str | None = None) -> None:
         self.asm = asm
-        self.name = self.asm._gen_ns_label_name(name) if name is not None else None
+        self.name = self.asm.gen_ns_label_name(name) if name is not None else None
 
     def __getattr__(self: Self, name: str) -> "Reference":
         return Reference(self.asm, name)
@@ -1602,7 +1602,7 @@ class LoopHelper:
         self.asm = asm
 
     def __enter__(self: Self) -> Loop:
-        name = self.asm._gen_unused_label("__generated_loop_label_{}")
+        name = self.asm.gen_unused_label("__generated_loop_label_{}")
         Label(self.asm).__getattr__(name)
         return Loop(self.asm, name)
 
