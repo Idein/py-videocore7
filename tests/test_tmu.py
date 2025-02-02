@@ -91,6 +91,113 @@ def test_tmu_single_write(n: int) -> None:
 
 
 @qpu
+def qpu_tmu_multiple_interleaved_transform_write(asm: Assembly, use_n_vec: int, interleave: int) -> None:
+    reg_addr = rf0
+    reg_stride = rf1
+    reg_tmu_config = rf2
+
+    nop(sig=ldunifrf(reg_addr))
+    bxor(rf3, rf3, rf3, sig=ldunifrf(reg_stride))
+    if use_n_vec > 1:
+        if use_n_vec >= 2:
+            bor(rf3, rf3, 5)
+        if use_n_vec >= 3:
+            shl(rf3, rf3, 8)
+            bor(rf3, rf3, 4)
+        if use_n_vec >= 4:
+            shl(rf3, rf3, 8)
+            bor(rf3, rf3, 3)
+        bxor(reg_tmu_config, -1, rf3)
+        # reg_tmu_config = TMULookUpConfig.sequential_read_write_vec(use_n_vec)
+        mov(tmuc, reg_tmu_config)
+
+    mov(rf11, 4)
+    shl(rf11, rf11, 2)
+    eidx(rf10)
+    for _ in range(use_n_vec):
+        mov(tmud, rf10)
+        add(rf10, rf10, rf11)
+
+    eidx(rf10)
+    shl(rf10, rf10, 2)
+    umul24(rf10, rf10, interleave + 1)
+    umul24(rf10, rf10, reg_stride)
+    add(tmua, rf10, reg_addr)
+    tmuwt()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+@hypothesis.given(
+    use_n_vec=hypothesis.strategies.integers(min_value=1, max_value=4),
+    interleave=hypothesis.strategies.integers(min_value=0, max_value=2),
+    pad_u=hypothesis.strategies.integers(min_value=0, max_value=15),
+    pad_l=hypothesis.strategies.integers(min_value=0, max_value=15),
+    pad_r=hypothesis.strategies.integers(min_value=0, max_value=15),
+)
+def test_tmu_multiple_interleaved_transform_write(  # FIXME: This test make other tests hang.
+    use_n_vec: int,
+    interleave: int,
+    pad_u: int,
+    pad_l: int,
+    pad_r: int,
+) -> None:
+    """Write with N-vec transpose and strided."""
+    base = np.arange(use_n_vec * 16).reshape(use_n_vec, 16).astype(np.int32)
+    # tmud <- [ 0, 1,...,15]
+    # tmud <- [16,17,...,31] (if use_n_vec >= 2)
+    # tmud <- [32,33,...,47] (if use_n_vec >= 3)
+    # tmud <- [48,49,...,63] (if use_n_vec == 4)
+    # base (on tmud, case: use_n_vec = 4):
+    # [ [  0,  1,  2, ..., 15],
+    #   [ 16, 17, 18, ..., 31],
+    #   [ 32, 33, 34, ..., 47],
+    #   [ 48, 49, 50, ..., 63] ]
+    expected = -np.ones((pad_u + 16 + 15 * interleave, pad_l + use_n_vec + pad_r), dtype=np.int32)
+    expected[pad_u :: interleave + 1, pad_l : pad_l + use_n_vec] = base.T
+    # interleaved (case: interleave = 1):
+    # [ [  0, -1,  1, -1,  2, -1, ..., 15],
+    #   [ 16, -1, 17, -1, 18, -1, ..., 31],
+    #   [ 32, -1, 33, -1, 34, -1, ..., 47],
+    #   [ 48, -1, 49, -1, 50, -1, ..., 63] ]
+    #
+    # expected (case: pad_u = 2, pad_l = 3, pad_r = 4):
+    # [ [ -1, -1, -1,      ...     , -1, -1, -1, -1],
+    #   [ -1, -1, -1,      ...     , -1, -1, -1, -1],
+    #         .                             .
+    #         .                             .
+    #   [ -1, -1, -1, interleaved.T, -1, -1, -1, -1] ]
+    #
+    with Driver() as drv:
+        code = drv.program(lambda asm: qpu_tmu_multiple_interleaved_transform_write(asm, use_n_vec, interleave))
+        data: Array[np.int32] = drv.alloc(expected.shape, dtype=np.int32)
+        unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
+
+        data[:] = -1
+
+        unif[0] = data.addresses()[pad_u, pad_l]
+        unif[1] = expected.shape[1]
+
+        drv.execute(code, unif.addresses()[0])
+
+        print("------------------------------------------------")
+        print(use_n_vec, interleave, pad_u, pad_l, pad_r)
+        print("[actual]")
+        print(data)
+        print("[expected]")
+        print(expected)
+
+        assert np.all(data == expected)
+
+
+@qpu
 def qpu_tmu_multiple_write_with_uniform_config(asm: Assembly, use_n_vec: int, interleave: int) -> None:
     reg_addr = rf0
     reg_stride = rf1
