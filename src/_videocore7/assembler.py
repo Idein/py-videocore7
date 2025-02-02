@@ -265,8 +265,8 @@ class Signal:
         self._dst = dst
 
     @property
-    def is_write(self: Self) -> bool:
-        """Write (to destination register) signal."""
+    def is_load(self: Self) -> bool:
+        """True if load to destination register signal."""
         return self._dst is not None
 
     @property
@@ -343,7 +343,7 @@ class Signals(set[Signal]):
 
     @property
     def is_write(self: Self) -> bool:
-        return any(sig.is_write for sig in self)
+        return any(sig.is_load for sig in self)
 
     @property
     def write_address(self: Self) -> int:
