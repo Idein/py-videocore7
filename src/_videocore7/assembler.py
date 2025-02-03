@@ -1424,27 +1424,27 @@ class MulALUOp(ALUOp):
 
 
 class ALU(Instruction):
-    add_op: AddALUOp
-    mul_op: MulALUOp | None
-    pack_result: int | None
+    _add_op: AddALUOp
+    _mul_op: MulALUOp | None
+    _pack_result: int | None
 
     def __init__(self: Self, asm: Assembly, opr: str, *args: Any, **kwargs: Any) -> None:
         super().__init__(asm)
 
         if opr in AddALUOp.OPERATIONS:
-            self.add_op = AddALUOp(opr, *args, **kwargs)
-            self.mul_op = None
+            self._add_op = AddALUOp(opr, *args, **kwargs)
+            self._mul_op = None
         elif opr in MulALUOp.OPERATIONS:
-            self.add_op = AddALUOp("nop")
-            self.mul_op = MulALUOp(opr, *args, **kwargs)
+            self._add_op = AddALUOp("nop")
+            self._mul_op = MulALUOp(opr, *args, **kwargs)
         else:
             raise AssembleError(f'"{opr}" is unknown operation')
         self._repack()
 
     def dual_issue(self: Self, opr: str, *args: Any, **kwargs: Any) -> None:
-        if self.mul_op is not None:
-            raise AssembleError(f'Conflict Mul ALU operation. "{self.mul_op.name}" is already issued.')
-        self.mul_op = MulALUOp(opr, *args, **kwargs)
+        if self._mul_op is not None:
+            raise AssembleError(f'Conflict Mul ALU operation. "{self._mul_op.name}" is already issued.')
+        self._mul_op = MulALUOp(opr, *args, **kwargs)
         self._repack()
 
     # Extract MulALUOp.OPERATIONS for typing
@@ -1496,15 +1496,15 @@ class ALU(Instruction):
         return functools.partial(self.dual_issue, "fmul")
 
     def _repack(self: Self) -> None:
-        self.pack_result = None
-        self.pack_result = self.pack()
+        self._pack_result = None
+        self._pack_result = self.pack()
 
     def pack(self: Self) -> int:
-        if self.pack_result is not None:
-            return self.pack_result
+        if self._pack_result is not None:
+            return self._pack_result
 
-        add_op = self.add_op
-        mul_op = self.mul_op
+        add_op = self._add_op
+        mul_op = self._mul_op
         if mul_op is None:
             mul_op = MulALUOp("nop")
 
