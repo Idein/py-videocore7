@@ -1113,13 +1113,13 @@ class ALUInstruction(ctypes.Union):
 class ALUOp:
     OPERATIONS: dict[str, Operation] = {}
 
-    name: str
-    op: Operation
-    dst: Register
-    raddr_a: ALURaddr
-    raddr_b: ALURaddr
-    cond: str | None
-    sigs: Signals
+    _name: str
+    _op: Operation
+    _dst: Register
+    _raddr_a: ALURaddr
+    _raddr_b: ALURaddr
+    _cond: str | None
+    _sigs: Signals
 
     def __init__(
         self: Self,
@@ -1132,9 +1132,9 @@ class ALUOp:
     ) -> None:
         assert opr in self.OPERATIONS
 
-        self.name = opr
-        self.op = self.OPERATIONS[opr]
-        self.dst = dst
+        self._name = opr
+        self._op = self.OPERATIONS[opr]
+        self._dst = dst
 
         match (self.op.has_a, src1):
             case (False, int() | float() | Register()):
@@ -1142,9 +1142,9 @@ class ALUOp:
             case (True, None):
                 raise AssembleError(f'"{self.name}" requires src1')
             case (True, int() | float() | Register()):
-                self.raddr_a = ALURaddr(src1)
+                self._raddr_a = ALURaddr(src1)
             case (False, None):
-                self.raddr_a = ALURaddr(Register("_unused", 0, 0))
+                self._raddr_a = ALURaddr(Register("_unused", 0, 0))
 
         match (self.op.has_b, src2):
             case (False, int() | float() | Register()):
@@ -1152,17 +1152,56 @@ class ALUOp:
             case (True, None):
                 raise AssembleError(f'"{self.name}" requires src2')
             case (True, int() | float() | Register()):
-                self.raddr_b = ALURaddr(src2)
+                self._raddr_b = ALURaddr(src2)
             case (False, None):
-                self.raddr_b = ALURaddr(Register("_unused", 0, 0))
+                self._raddr_b = ALURaddr(Register("_unused", 0, 0))
 
-        self.cond = cond
-        self.sigs = Signals()
+        self._cond = cond
+        self._sigs = Signals()
         if sig is not None:
             self.sigs.add(sig)
 
     def pack(self: Self) -> int:
         assert False, "Bug: Not implemented"
+
+    @property
+    def name(self: Self) -> str:
+        return self._name
+
+    @property
+    def op(self: Self) -> Operation:
+        return self._op
+
+    @property
+    def dst(self: Self) -> Register:
+        return self._dst
+
+    @property
+    def raddr_a(self: Self) -> ALURaddr:
+        return self._raddr_a
+
+    @property
+    def raddr_b(self: Self) -> ALURaddr:
+        return self._raddr_b
+
+    @property
+    def cond(self: Self) -> str | None:
+        return self._cond
+
+    @property
+    def sigs(self: Self) -> Signals:
+        return self._sigs
+
+    def swap_signal(self: Self, sig1: Signal, sig2: Signal) -> None:
+        sigs = Signals()
+        for sig in self.sigs:
+            if sig == sig1:
+                sigs.add(sig2)
+            elif sig == sig2:
+                sigs.add(sig1)
+            else:
+                sigs.add(sig)
+        self._sigs = sigs
 
 
 class AddALUOp(ALUOp):
@@ -1204,15 +1243,7 @@ class AddALUOp(ALUOp):
                     raddr_a, raddr_b = raddr_b, raddr_a
                     if isinstance(self.raddr_a._addr, int | float) or isinstance(self.raddr_b._addr, int | float):
                         assert self.raddr_a._addr != self.raddr_b._addr
-                        sigs = Signals()
-                        for sig in self.sigs:
-                            if sig.name == "smimm_a":
-                                sigs.add(Signal("smimm_b"))
-                            elif sig.name == "smimm_b":
-                                sigs.add(Signal("smimm_a"))
-                            else:
-                                sigs.add(sig)
-                        self.sigs = sigs
+                        self.swap_signal(Signal("smimm_a"), Signal("smimm_b"))
 
                 op |= a_unpack << 2
                 op |= b_unpack << 0
