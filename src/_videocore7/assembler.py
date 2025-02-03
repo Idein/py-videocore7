@@ -714,9 +714,11 @@ class ALURaddr:
 
     @property
     def modifier(self: Self) -> InputUnpackModifier:
-        if isinstance(self._addr, Register):
-            return self._addr.unpack_modifier
-        return Register.INPUT_MODIFIER["none"]
+        match self._addr:
+            case Register() as reg:
+                return reg.unpack_modifier
+            case _:
+                return Register.INPUT_MODIFIER["none"]
 
     def pack(self: Self) -> int:
         raddr: int = 0
@@ -738,12 +740,15 @@ class ALURaddr:
                 smimms_float[2 ** (i - 8)] = i + 32
             return smimms_float[x]
 
-        if isinstance(self._addr, int):
-            raddr = pack_smimms_int(self._addr)
-        elif isinstance(self._addr, float):
-            raddr = pack_smimms_float(self._addr)
-        elif isinstance(self._addr, Register):
-            raddr = self._addr.waddr
+        match self._addr:
+            case int():
+                raddr = pack_smimms_int(self._addr)
+            case float():
+                raddr = pack_smimms_float(self._addr)
+            case Register() as reg:
+                raddr = reg.waddr
+            case _:
+                raise RuntimeError("unreachable")
 
         return raddr
 
