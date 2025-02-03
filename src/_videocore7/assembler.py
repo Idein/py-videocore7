@@ -1531,16 +1531,46 @@ class Link:
         pass
 
 
+class Condition:
+    _name: str
+    _code: int
+
+    def __init__(self: Self, name: str, code: int) -> None:
+        self._name = name
+        self._code = code
+
+    @property
+    def name(self: Self) -> str:
+        return self._name
+
+    @property
+    def code(self: Self) -> int:
+        return self._code
+
+
+_conditions: dict[str, Condition] = {
+    name: Condition(name, code)
+    for name, code in [
+        ("always", 0),
+        ("a0", 2),
+        ("na0", 3),
+        ("alla", 4),
+        ("anyna", 5),
+        ("anya", 6),
+        ("allna", 7),
+    ]
+}
+
+
 class Branch(Instruction):
-    cond_name: str
-    cond_br: int
-    raddr_a: int | None
-    addr_label: Reference | None
-    addr: int | None
-    set_link: bool
-    ub: int
-    bdu: int
-    bdi: int
+    _cond: Condition
+    _raddr_a: int | None
+    _addr_label: Reference | None
+    _addr: int | None
+    _set_link: bool
+    _ub: int
+    _bdu: int
+    _bdi: int
 
     def __init__(
         self: Self,
@@ -1553,66 +1583,60 @@ class Branch(Instruction):
     ) -> None:
         super().__init__(asm)
 
-        self.cond_name = cond
-        self.cond_br = {
-            "always": 0,
-            "a0": 2,
-            "na0": 3,
-            "alla": 4,
-            "anyna": 5,
-            "anya": 6,
-            "allna": 7,
-        }[self.cond_name]
-        self.raddr_a = None
-        self.addr_label = None
-        self.addr = None
-        self.set_link = set_link
+        if cond not in _conditions:
+            raise AssembleError(f'"{cond}" is unknown condition')
 
-        self.ub = 0
-        self.bdu = 1
+        self._cond = _conditions[cond]
+        self._raddr_a = None
+        self._addr_label = None
+        self._addr = None
+        self._set_link = set_link
+
+        self._ub = 0
+        self._bdu = 1
 
         if isinstance(src, Link):
             # Branch to link_reg
-            self.bdi = 2
+            self._bdi = 2
         elif isinstance(src, Register) and src.magic == 0:
             # Branch to reg
-            self.bdi = 3
-            self.raddr_a = src.waddr
+            self._bdi = 3
+            self._raddr_a = src.waddr
         elif isinstance(src, Reference):
             # Branch to label
-            self.bdi = 1
-            self.addr_label = src
+            self._bdi = 1
+            self._addr_label = src
         elif isinstance(src, int):
             # Branch to imm
-            self.bdi = 0 if absolute else 1
-            self.addr = src
+            self._bdi = 0 if absolute else 1
+            self._addr = src
         else:
             raise AssembleError("Invalid src object")
 
     def unif_addr(self: Self, src: Register | None = None, absolute: bool = False) -> None:
-        self.ub = 1
-        self.bdu = 1
+        self._ub = 1
+        self._bdu = 1
         if src is None:
-            self.bdu = 0 if absolute else 1
+            self._bdu = 0 if absolute else 1
         elif isinstance(src, Register) and src.magic == 0:
             # Branch to reg
-            self.bdu = 3
-            if self.raddr_a is None or self.raddr_a == src.waddr:
-                self.raddr_a = src.waddr
+            self._bdu = 3
+            if self._raddr_a is None or self._raddr_a == src.waddr:
+                self._raddr_a = src.waddr
             else:
                 raise AssembleError("Conflict registers")
         else:
             raise AssembleError("Invalid src object")
 
     def pack(self: Self) -> int:
-        if self.addr_label is not None:
-            addr = cast(int, pack_unpack("i", "I", (int(self.addr_label) - self.serial - 4) * 8))
-        elif self.addr is not None:
-            addr = self.addr
+        if self._addr_label is not None:
+            addr = cast(int, pack_unpack("i", "I", (int(self._addr_label) - self.serial - 4) * 8))
+        elif self._addr is not None:
+            addr = self._addr
         else:
             addr = 0
 
-        set_link = 1 if self.set_link else 0
+        set_link = 1 if self._set_link else 0
 
         msfign = 0b00
 
@@ -1620,14 +1644,14 @@ class Branch(Instruction):
             0
             | (0b10 << 56)
             | (((addr & ((1 << 24) - 1)) >> 3) << 35)
-            | (self.cond_br << 32)
+            | (self._cond.code << 32)
             | ((addr >> 24) << 24)
             | (set_link << 23)
             | (msfign << 21)
-            | (self.bdu << 15)
-            | (self.ub << 14)
-            | (self.bdi << 12)
-            | ((self.raddr_a if self.raddr_a is not None else 0) << 6)
+            | (self._bdu << 15)
+            | (self._ub << 14)
+            | (self._bdi << 12)
+            | ((self._raddr_a if self._raddr_a is not None else 0) << 6)
         )
 
 
