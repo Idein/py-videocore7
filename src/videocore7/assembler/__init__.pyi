@@ -1,6 +1,3 @@
-from collections.abc import Callable
-from typing import Any
-
 from _videocore7.assembler import ALU as ALU
 from _videocore7.assembler import Assembly as Assembly
 from _videocore7.assembler import Branch as Branch
@@ -9,6 +6,7 @@ from _videocore7.assembler import LabelNameSpace as LabelNameSpace
 from _videocore7.assembler import Link as Link
 from _videocore7.assembler import LoadSignal as LoadSignal
 from _videocore7.assembler import LoopHelper
+from _videocore7.assembler import Reference as Reference
 from _videocore7.assembler import ReferenceHelper as ReferenceHelper
 from _videocore7.assembler import Register as Register
 from _videocore7.assembler import Signal as Signal
@@ -20,9 +18,18 @@ from _videocore7.assembler import qpu as qpu
 loop: LoopHelper
 L: Label
 R: ReferenceHelper
-b: Callable[..., Branch]  # TODO: typing
+
+def b(
+    src: int | Register | Reference | Link | None,
+    *,
+    cond: str,
+    absolute: bool = False,
+    set_link: bool = False,
+) -> Branch: ...
+
 link: Link
-namespace: Callable[[str], LabelNameSpace]
+
+def namespace(name: str) -> LabelNameSpace: ...
 
 # Signals
 thrsw: Signal
@@ -141,107 +148,632 @@ rf62: Register
 rf63: Register
 
 # Add ALU instructions
-def fadd(*args: Any, **kwargs: Any) -> ALU: ...
-def faddnf(*args: Any, **kwargs: Any) -> ALU: ...
-def vfpack(*args: Any, **kwargs: Any) -> ALU: ...
-def add(*args: Any, **kwargs: Any) -> ALU: ...
-def sub(*args: Any, **kwargs: Any) -> ALU: ...
-def fsub(*args: Any, **kwargs: Any) -> ALU: ...
-def imin(*args: Any, **kwargs: Any) -> ALU: ...
-def imax(*args: Any, **kwargs: Any) -> ALU: ...
-def umin(*args: Any, **kwargs: Any) -> ALU: ...
-def umax(*args: Any, **kwargs: Any) -> ALU: ...
-def shl(*args: Any, **kwargs: Any) -> ALU: ...
-def shr(*args: Any, **kwargs: Any) -> ALU: ...
-def asr(*args: Any, **kwargs: Any) -> ALU: ...
-def ror(*args: Any, **kwargs: Any) -> ALU: ...
-def fmin(*args: Any, **kwargs: Any) -> ALU: ...
-def fmax(*args: Any, **kwargs: Any) -> ALU: ...
-def vfmin(*args: Any, **kwargs: Any) -> ALU: ...
-def band(*args: Any, **kwargs: Any) -> ALU: ...
-def bor(*args: Any, **kwargs: Any) -> ALU: ...
-def bxor(*args: Any, **kwargs: Any) -> ALU: ...
-def vadd(*args: Any, **kwargs: Any) -> ALU: ...
-def vsub(*args: Any, **kwargs: Any) -> ALU: ...
-def bnot(*args: Any, **kwargs: Any) -> ALU: ...
-def neg(*args: Any, **kwargs: Any) -> ALU: ...
-def flapush(*args: Any, **kwargs: Any) -> ALU: ...
-def flbpush(*args: Any, **kwargs: Any) -> ALU: ...
-def flpop(*args: Any, **kwargs: Any) -> ALU: ...
-def clz(*args: Any, **kwargs: Any) -> ALU: ...
-def setmsf(*args: Any, **kwargs: Any) -> ALU: ...
-def setrevf(*args: Any, **kwargs: Any) -> ALU: ...
-def nop(*args: Any, **kwargs: Any) -> ALU: ...
-def tidx(*args: Any, **kwargs: Any) -> ALU: ...
-def eidx(*args: Any, **kwargs: Any) -> ALU: ...
-def lr(*args: Any, **kwargs: Any) -> ALU: ...
-def vfla(*args: Any, **kwargs: Any) -> ALU: ...
-def vflna(*args: Any, **kwargs: Any) -> ALU: ...
-def vflb(*args: Any, **kwargs: Any) -> ALU: ...
-def vflnb(*args: Any, **kwargs: Any) -> ALU: ...
-def xcd(*args: Any, **kwargs: Any) -> ALU: ...
-def ycd(*args: Any, **kwargs: Any) -> ALU: ...
-def msf(*args: Any, **kwargs: Any) -> ALU: ...
-def revf(*args: Any, **kwargs: Any) -> ALU: ...
-def iid(*args: Any, **kwargs: Any) -> ALU: ...
-def sampid(*args: Any, **kwargs: Any) -> ALU: ...
-def barrierid(*args: Any, **kwargs: Any) -> ALU: ...
-def tmuwt(*args: Any, **kwargs: Any) -> ALU: ...
-def vpmwt(*args: Any, **kwargs: Any) -> ALU: ...
-def flafirst(*args: Any, **kwargs: Any) -> ALU: ...
-def flnafirst(*args: Any, **kwargs: Any) -> ALU: ...
-def fxcd(*args: Any, **kwargs: Any) -> ALU: ...
-def fycd(*args: Any, **kwargs: Any) -> ALU: ...
-def ldvpmv_in(*args: Any, **kwargs: Any) -> ALU: ...
-def ldvpmd_in(*args: Any, **kwargs: Any) -> ALU: ...
-def ldvpmp(*args: Any, **kwargs: Any) -> ALU: ...
-def recip(*args: Any, **kwargs: Any) -> ALU: ...
-def rsqrt(*args: Any, **kwargs: Any) -> ALU: ...
-def exp(*args: Any, **kwargs: Any) -> ALU: ...
-def log(*args: Any, **kwargs: Any) -> ALU: ...
-def sin(*args: Any, **kwargs: Any) -> ALU: ...
-def rsqrt2(*args: Any, **kwargs: Any) -> ALU: ...
-def ballot(*args: Any, **kwargs: Any) -> ALU: ...
-def bcastf(*args: Any, **kwargs: Any) -> ALU: ...
-def alleq(*args: Any, **kwargs: Any) -> ALU: ...
-def allfeq(*args: Any, **kwargs: Any) -> ALU: ...
-def ldvpmg_in(*args: Any, **kwargs: Any) -> ALU: ...
-def stvpmv(*args: Any, **kwargs: Any) -> ALU: ...
-def stvpmd(*args: Any, **kwargs: Any) -> ALU: ...
-def stvpmp(*args: Any, **kwargs: Any) -> ALU: ...
-def fcmp(*args: Any, **kwargs: Any) -> ALU: ...
-def vfmax(*args: Any, **kwargs: Any) -> ALU: ...
-def fround(*args: Any, **kwargs: Any) -> ALU: ...
-def ftoin(*args: Any, **kwargs: Any) -> ALU: ...
-def ftrunc(*args: Any, **kwargs: Any) -> ALU: ...
-def ftoiz(*args: Any, **kwargs: Any) -> ALU: ...
-def ffloor(*args: Any, **kwargs: Any) -> ALU: ...
-def ftouz(*args: Any, **kwargs: Any) -> ALU: ...
-def fceil(*args: Any, **kwargs: Any) -> ALU: ...
-def ftoc(*args: Any, **kwargs: Any) -> ALU: ...
-def fdx(*args: Any, **kwargs: Any) -> ALU: ...
-def fdy(*args: Any, **kwargs: Any) -> ALU: ...
-def itof(*args: Any, **kwargs: Any) -> ALU: ...
-def utof(*args: Any, **kwargs: Any) -> ALU: ...
-def vpack(*args: Any, **kwargs: Any) -> ALU: ...
-def v8pack(*args: Any, **kwargs: Any) -> ALU: ...
-def fmov(*args: Any, **kwargs: Any) -> ALU: ...
-def mov(*args: Any, **kwargs: Any) -> ALU: ...
-def v10pack(*args: Any, **kwargs: Any) -> ALU: ...
-def v11fpack(*args: Any, **kwargs: Any) -> ALU: ...
-def quad_rotate(*args: Any, **kwargs: Any) -> ALU: ...
-def rotate(*args: Any, **kwargs: Any) -> ALU: ...
-def shuffle(*args: Any, **kwargs: Any) -> ALU: ...
+def fadd(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def faddnf(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vfpack(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def add(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def sub(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fsub(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def imin(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def imax(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def umin(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def umax(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def shl(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def shr(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def asr(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ror(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fmin(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fmax(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vfmin(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def band(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def bor(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def bxor(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vadd(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vsub(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def bnot(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def neg(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def flapush(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def flbpush(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def flpop(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def clz(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def setmsf(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def setrevf(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def nop(
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def tidx(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def eidx(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def lr(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vfla(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vflna(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vflb(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vflnb(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def xcd(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ycd(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def msf(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def revf(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def iid(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def sampid(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def barrierid(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def tmuwt(
+    dst: Register = null,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vpmwt(
+    dst: Register = null,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def flafirst(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def flnafirst(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fxcd(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fycd(
+    dst: Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ldvpmv_in(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ldvpmd_in(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ldvpmp(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def recip(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def rsqrt(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def exp(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def log(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def sin(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def rsqrt2(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ballot(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def bcastf(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def alleq(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def allfeq(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ldvpmg_in(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def stvpmv(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def stvpmd(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def stvpmp(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fcmp(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vfmax(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fround(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ftoin(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ftrunc(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ftoiz(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ffloor(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ftouz(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fceil(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ftoc(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fdx(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fdy(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def itof(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def utof(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vpack(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def v8pack(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fmov(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def mov(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def v10pack(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def v11fpack(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def quad_rotate(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def rotate(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def shuffle(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
 
 # Mul ALU instructions
-def umul24(*args: Any, **kwargs: Any) -> ALU: ...
-def vfmul(*args: Any, **kwargs: Any) -> ALU: ...
-def smul24(*args: Any, **kwargs: Any) -> ALU: ...
-def multop(*args: Any, **kwargs: Any) -> ALU: ...
-def ftounorm16(*args: Any, **kwargs: Any) -> ALU: ...
-def ftosnorm16(*args: Any, **kwargs: Any) -> ALU: ...
-def vftounorm8(*args: Any, **kwargs: Any) -> ALU: ...
-def vftosnorm8(*args: Any, **kwargs: Any) -> ALU: ...
-def vftounorm10lo(*args: Any, **kwargs: Any) -> ALU: ...
-def vftounorm10hi(*args: Any, **kwargs: Any) -> ALU: ...
-def fmul(*args: Any, **kwargs: Any) -> ALU: ...
+def umul24(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vfmul(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def smul24(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def multop(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ftounorm16(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def ftosnorm16(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vftounorm8(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vftosnorm8(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vftounorm10lo(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def vftounorm10hi(
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
+def fmul(
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALU: ...
