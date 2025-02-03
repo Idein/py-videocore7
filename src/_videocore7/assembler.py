@@ -1595,23 +1595,21 @@ class Branch(Instruction):
         self._ub = 0
         self._bdu = 1
 
-        if isinstance(src, Link):
-            # Branch to link_reg
-            self._bdi = 2
-        elif isinstance(src, Register) and src.magic == 0:
-            # Branch to reg
-            self._bdi = 3
-            self._raddr_a = src.waddr
-        elif isinstance(src, Reference):
-            # Branch to label
-            self._bdi = 1
-            self._addr_label = src
-        elif isinstance(src, int):
-            # Branch to imm
-            self._bdi = 0 if absolute else 1
-            self._addr = src
-        else:
-            raise AssembleError("Invalid src object")
+        match src:
+            case Link():  # Branch to link_reg
+                self._bdi = 2
+            case Register() as reg:  # Branch to rf
+                if reg.magic == 0:
+                    self._bdi = 3
+                    self._raddr_a = reg.waddr
+            case Reference() as ref:  # Branch to label
+                self._bdi = 1
+                self._addr_label = ref
+            case int() as imm:  # Branch to imm
+                self._bdi = 0 if absolute else 1
+                self._addr = imm
+            case _:
+                raise AssembleError("Invalid src object")
 
     def unif_addr(self: Self, src: Register | None = None, absolute: bool = False) -> None:
         self._ub = 1
