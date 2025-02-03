@@ -24,7 +24,7 @@ import functools
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from types import TracebackType
-from typing import Annotated, Any, Concatenate, Final, Self, cast
+from typing import Annotated, Concatenate, Final, Self, cast
 
 from .util import pack_unpack
 
@@ -37,8 +37,8 @@ class Assembly(list["Instruction"]):
     _labels: dict[str, int]
     _label_name_spaces: list[str]
 
-    def __init__(self: Self, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+    def __init__(self: Self):
+        super().__init__()
         self._labels = {}
         self._label_name_spaces = []
 
@@ -1428,23 +1428,40 @@ class ALU(Instruction):
     _mul_op: MulALUOp | None
     _pack_result: int | None
 
-    def __init__(self: Self, asm: Assembly, opr: str, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self: Self,
+        asm: Assembly,
+        opr: str,
+        dst: Register = Instruction.REGISTERS["null"],
+        src1: int | float | Register | None = None,
+        src2: int | float | Register | None = None,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
         super().__init__(asm)
 
         if opr in AddALUOp.OPERATIONS:
-            self._add_op = AddALUOp(opr, *args, **kwargs)
+            self._add_op = AddALUOp(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
             self._mul_op = None
         elif opr in MulALUOp.OPERATIONS:
             self._add_op = AddALUOp("nop")
-            self._mul_op = MulALUOp(opr, *args, **kwargs)
+            self._mul_op = MulALUOp(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
         else:
             raise AssembleError(f'"{opr}" is unknown operation')
         self._repack()
 
-    def dual_issue(self: Self, opr: str, *args: Any, **kwargs: Any) -> None:
+    def dual_issue(
+        self: Self,
+        opr: str,
+        dst: Register = Instruction.REGISTERS["null"],
+        src1: int | float | Register | None = None,
+        src2: int | float | Register | None = None,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
         if self._mul_op is not None:
             raise AssembleError(f'Conflict Mul ALU operation. "{self._mul_op.name}" is already issued.')
-        self._mul_op = MulALUOp(opr, *args, **kwargs)
+        self._mul_op = MulALUOp(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
         self._repack()
 
     # Extract MulALUOp.OPERATIONS for typing
@@ -1455,45 +1472,100 @@ class ALU(Instruction):
     #     raise AssembleError(f'"{name}" is not MulALU operation')
     #
 
-    @property
-    def add(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "add")
+    def add(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("add", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
-    @property
-    def sub(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "sub")
+    def sub(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("sub", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
-    @property
-    def umul24(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "umul24")
+    def umul24(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("umul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
-    @property
-    def vfmul(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "vfmul")
+    def vfmul(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("vfmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
-    @property
-    def smul24(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "smul24")
+    def smul24(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("smul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
-    @property
-    def multop(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "multop")
+    def multop(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("multop", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
-    @property
-    def fmov(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "fmov")
+    def fmov(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("fmov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
 
-    @property
-    def nop(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "nop")
+    def nop(
+        self: Self,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("nop", dst=Instruction.REGISTERS["null"], src1=None, src2=None, cond=cond, sig=sig)
 
-    @property
-    def mov(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "mov")
+    def mov(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("mov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
 
-    @property
-    def fmul(self: Self) -> Callable[..., None]:
-        return functools.partial(self.dual_issue, "fmul")
+    def fmul(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("fmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
     def _repack(self: Self) -> None:
         self._pack_result = None
@@ -1678,8 +1750,14 @@ class Loop:
         self.asm = asm
         self.name = name
 
-    def b(self: Self, *args: Any, **kwargs: Any) -> Branch:
-        return Branch(self.asm, Reference(self.asm, self.name), *args, **kwargs)
+    def b(
+        self: Self,
+        *,
+        cond: str,
+        absolute: bool = False,
+        set_link: bool = False,
+    ) -> Branch:
+        return Branch(self.asm, Reference(self.asm, self.name), cond=cond, absolute=absolute, set_link=set_link)
 
 
 class LoopHelper:
@@ -1702,7 +1780,7 @@ class LoopHelper:
         pass
 
 
-def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Any:
+def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Callable[Concatenate[Assembly, P], R]:
     @functools.wraps(func)
     def decorator(asm: Assembly, *args: P.args, **kwargs: P.kwargs) -> R:
         g = func.__globals__
@@ -1733,7 +1811,7 @@ def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Any:
             g[key] = value
         return result
 
-    return decorator
+    return cast(Callable[Concatenate[Assembly, P], R], decorator)
 
 
 def _assemble[**P, R](f: Callable[Concatenate[Assembly, P], R], *args: P.args, **kwargs: P.kwargs) -> Assembly:
