@@ -1654,14 +1654,14 @@ class Branch(Instruction):
 
 
 class Raw(Instruction):
-    packed_code: int
+    _packed_code: int
 
     def __init__(self: Self, asm: Assembly, packed_code: int) -> None:
         super().__init__(asm)
-        self.packed_code = packed_code
+        self._packed_code = packed_code
 
     def pack(self) -> int:
-        return self.packed_code
+        return self._packed_code
 
 
 class SFUIntegrator(Register):
