@@ -1664,18 +1664,6 @@ class Raw(Instruction):
         return self._packed_code
 
 
-class SFUIntegrator(Register):
-    def __init__(self: Self, asm: Assembly, name: str) -> None:
-        self.asm = asm
-        self.reg_name = "_reg_" + name
-        self.op_name = "_op_" + name
-        reg = Instruction.REGISTERS[self.reg_name]
-        super().__init__(reg.name, reg.magic, reg.waddr)
-
-    def __call__(self: Self, dst: Any, src: Any, **kwargs: Any) -> ALU:
-        return ALU(self.asm, self.op_name, dst, src, **kwargs)
-
-
 _alias_regs: dict[str, Register] = {
     "broadcast": Instruction.REGISTERS["rep"],
     "quad_broadcast": Instruction.REGISTERS["quad"],
@@ -1732,10 +1720,7 @@ def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Any:
             if not add_op.startswith("_op_"):
                 g[add_op] = functools.partial(ALU, asm, add_op)
         for waddr, reg in Instruction.REGISTERS.items():
-            if waddr.startswith("_reg_"):
-                g[waddr[5:]] = SFUIntegrator(asm, waddr[5:])
-            else:
-                g[waddr] = reg
+            g[waddr] = reg
         g["rf"] = [Instruction.REGISTERS[f"rf{i}"] for i in range(64)]
         for alias_name, alias_reg in _alias_regs.items():
             g[alias_name] = alias_reg
