@@ -1545,7 +1545,6 @@ class Branch(Instruction):
     def __init__(
         self: Self,
         asm: Assembly,
-        opr: str,
         src: int | Register | Reference | Link | None,
         *,
         cond: str,
@@ -1670,7 +1669,7 @@ class Loop:
         self.name = name
 
     def b(self: Self, *args: Any, **kwargs: Any) -> Branch:
-        return Branch(self.asm, "b", Reference(self.asm, self.name), *args, **kwargs)
+        return Branch(self.asm, Reference(self.asm, self.name), *args, **kwargs)
 
 
 class LoopHelper:
@@ -1701,7 +1700,7 @@ def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Any:
         g["L"] = Label(asm)
         g["R"] = ReferenceHelper(asm)
         g["loop"] = LoopHelper(asm)
-        g["b"] = functools.partial(Branch, asm, "b")
+        g["b"] = functools.partial(Branch, asm)
         g["link"] = Link()
         g["raw"] = functools.partial(Raw, asm)
         g["namespace"] = functools.partial(LabelNameSpace, asm)
