@@ -46,7 +46,8 @@ def load_params(asm: Assembly, thread: int, regs: list[Register]) -> None:
     elif thread == 24:
         # 16 threads (2 threads / qpu)
         tidx(rf0, sig=ldunifrf(rf6))
-        shr(rf0, rf0, 1).mov(rf1, 1)
+        mov(rf1, 1)
+        shr(rf0, rf0, 1)
         shl(rf1, rf1, 5)
         sub(rf1, rf1, 1)
         # rf0, rf1 = (tidx >> 1, 0b11111)

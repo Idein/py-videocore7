@@ -24,7 +24,7 @@ import functools
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from types import TracebackType
-from typing import Annotated, Concatenate, Final, Self, cast
+from typing import Annotated, Concatenate, Final, Self, cast, overload
 
 from .util import pack_unpack
 
@@ -1464,109 +1464,6 @@ class ALU(Instruction):
         self._mul_op = MulALUOp(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
         self._repack()
 
-    # Extract MulALUOp.OPERATIONS for typing
-    #
-    # def __getattr__(self: Self, name: str) -> Callable[..., None]:
-    #     if name in MulALUOp.OPERATIONS:
-    #         return functools.partial(self.dual_issue, name)
-    #     raise AssembleError(f'"{name}" is not MulALU operation')
-    #
-
-    def add(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        src2: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("add", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
-
-    def sub(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        src2: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("sub", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
-
-    def umul24(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        src2: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("umul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
-
-    def vfmul(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        src2: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("vfmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
-
-    def smul24(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        src2: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("smul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
-
-    def multop(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        src2: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("multop", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
-
-    def fmov(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("fmov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
-
-    def nop(
-        self: Self,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("nop", dst=Instruction.REGISTERS["null"], src1=None, src2=None, cond=cond, sig=sig)
-
-    def mov(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("mov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
-
-    def fmul(
-        self: Self,
-        dst: Register,
-        src1: int | float | Register,
-        src2: int | float | Register,
-        cond: str | None = None,
-        sig: Signal | None = None,
-    ) -> None:
-        return self.dual_issue("fmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
-
     def _repack(self: Self) -> None:
         self._pack_result = None
         self._pack_result = self.pack()
@@ -1596,6 +1493,449 @@ class ALU(Instruction):
         cond = ALUConditions(add_op.cond, mul_op.cond)
 
         return 0 | sigs.pack() | cond.pack(sigs) | add_op.pack() | mul_op.pack()
+
+
+class ALUWithoutSMIMM(ALU):
+    """ALU Instruction doesn't includes small immediate values yet."""
+
+    def __init__(
+        self: Self,
+        asm: Assembly,
+        opr: str,
+        dst: Register = Instruction.REGISTERS["null"],
+        src1: int | float | Register | None = None,
+        src2: int | float | Register | None = None,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        super().__init__(asm, opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    @overload
+    def add(
+        self: Self,
+        dst: Register,
+        src1: int,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def add(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: int,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def add(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def add(
+        self: Self,
+        dst: Register,
+        src1: int | Register,
+        src2: int | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("add", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    @overload
+    def sub(
+        self: Self,
+        dst: Register,
+        src1: int,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def sub(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: int,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def sub(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def sub(
+        self: Self,
+        dst: Register,
+        src1: int | Register,
+        src2: int | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("sub", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    @overload
+    def umul24(
+        self: Self,
+        dst: Register,
+        src1: int,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def umul24(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: int,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def umul24(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def umul24(
+        self: Self,
+        dst: Register,
+        src1: int | Register,
+        src2: int | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("umul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    @overload
+    def vfmul(
+        self: Self,
+        dst: Register,
+        src1: float,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def vfmul(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: float,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def vfmul(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def vfmul(
+        self: Self,
+        dst: Register,
+        src1: float | Register,
+        src2: float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("vfmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    @overload
+    def smul24(
+        self: Self,
+        dst: Register,
+        src1: int,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def smul24(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: int,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def smul24(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def smul24(
+        self: Self,
+        dst: Register,
+        src1: int | Register,
+        src2: int | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("smul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    @overload
+    def multop(
+        self: Self,
+        dst: Register,
+        src1: int | float,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def multop(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: int | float,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def multop(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def multop(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("multop", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    @overload
+    def fmov(
+        self: Self,
+        dst: Register,
+        src1: float,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def fmov(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def fmov(
+        self: Self,
+        dst: Register,
+        src1: float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("fmov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
+
+    def nop(
+        self: Self,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("nop", dst=Instruction.REGISTERS["null"], src1=None, src2=None, cond=cond, sig=sig)
+
+    @overload
+    def mov(
+        self: Self,
+        dst: Register,
+        src1: int | float,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def mov(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def mov(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("mov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
+
+    @overload
+    def fmul(
+        self: Self,
+        dst: Register,
+        src1: float,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def fmul(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: float,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    @overload
+    def fmul(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None: ...
+    def fmul(
+        self: Self,
+        dst: Register,
+        src1: int | float | Register,
+        src2: int | float | Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("fmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+
+class ALUWithSMIMM(ALU):
+    """ALU Instruction already includes small immediate values."""
+
+    def __init__(
+        self: Self,
+        asm: Assembly,
+        opr: str,
+        dst: Register = Instruction.REGISTERS["null"],
+        src1: int | float | Register | None = None,
+        src2: int | float | Register | None = None,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        super().__init__(asm, opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    def add(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("add", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    def sub(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("sub", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    def umul24(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("umul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    def vfmul(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("vfmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    def smul24(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("smul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    def multop(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("multop", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+    def fmov(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("fmov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
+
+    def nop(
+        self: Self,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("nop", dst=Instruction.REGISTERS["null"], src1=None, src2=None, cond=cond, sig=sig)
+
+    def mov(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("mov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
+
+    def fmul(
+        self: Self,
+        dst: Register,
+        src1: Register,
+        src2: Register,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        return self.dual_issue("fmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
 
 class Link:
@@ -1780,6 +2120,78 @@ class LoopHelper:
         pass
 
 
+def binary_add_inst(
+    name: str,
+    asm: Assembly,
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALUWithSMIMM | ALUWithoutSMIMM:
+    match (src1, src2):
+        case (Register(), Register()):
+            return ALUWithoutSMIMM(asm, name, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+        case _:
+            return ALUWithSMIMM(asm, name, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+
+def unary_add_inst(
+    name: str,
+    asm: Assembly,
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALUWithSMIMM | ALUWithoutSMIMM:
+    match src:
+        case Register():
+            return ALUWithoutSMIMM(asm, name, dst=dst, src1=src, cond=cond, sig=sig)
+        case _:
+            return ALUWithSMIMM(asm, name, dst=dst, src1=src, cond=cond, sig=sig)
+
+
+def nullary_add_inst(
+    name: str,
+    asm: Assembly,
+    dst: Register = Instruction.REGISTERS["null"],
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> ALUWithSMIMM | ALUWithoutSMIMM:
+    return ALUWithoutSMIMM(asm, name, dst=dst, cond=cond, sig=sig)
+
+
+def binary_mul_inst(
+    name: str,
+    asm: Assembly,
+    dst: Register,
+    src1: int | float | Register,
+    src2: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> None:
+    match (src1, src2):
+        case (Register(), Register()):
+            ALUWithoutSMIMM(asm, name, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+        case _:
+            ALUWithSMIMM(asm, name, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
+
+
+def unary_mul_inst(
+    name: str,
+    asm: Assembly,
+    dst: Register,
+    src: int | float | Register,
+    cond: str | None = None,
+    sig: Signal | None = None,
+) -> None:
+    match src:
+        case Register():
+            ALUWithoutSMIMM(asm, name, dst=dst, src1=src, cond=cond, sig=sig)
+        case _:
+            ALUWithSMIMM(asm, name, dst=dst, src1=src, cond=cond, sig=sig)
+
+
 def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Callable[Concatenate[Assembly, P], R]:
     @functools.wraps(func)
     def decorator(asm: Assembly, *args: P.args, **kwargs: P.kwargs) -> R:
@@ -1792,11 +2204,18 @@ def qpu[**P, R](func: Callable[Concatenate[Assembly, P], R]) -> Callable[Concate
         g["link"] = Link()
         g["raw"] = functools.partial(Raw, asm)
         g["namespace"] = functools.partial(LabelNameSpace, asm)
-        for mul_op in MulALUOp.OPERATIONS.keys():
-            g[mul_op] = functools.partial(ALU, asm, mul_op)
-        for add_op in AddALUOp.OPERATIONS.keys():
-            if not add_op.startswith("_op_"):
-                g[add_op] = functools.partial(ALU, asm, add_op)
+        for op_name, op in MulALUOp.OPERATIONS.items():
+            if op.has_dst and op.has_a and op.has_b:
+                g[op_name] = functools.partial(binary_mul_inst, op_name, asm)
+            elif op.has_dst and op.has_a and not op.has_b:
+                g[op_name] = functools.partial(unary_mul_inst, op_name, asm)
+        for op_name, op in AddALUOp.OPERATIONS.items():
+            if op.has_dst and op.has_a and op.has_b:
+                g[op_name] = functools.partial(binary_add_inst, op_name, asm)
+            elif op.has_dst and op.has_a and not op.has_b:
+                g[op_name] = functools.partial(unary_add_inst, op_name, asm)
+            elif not op.has_a and not op.has_b:
+                g[op_name] = functools.partial(nullary_add_inst, op_name, asm)
         for waddr, reg in Instruction.REGISTERS.items():
             g[waddr] = reg
         g["rf"] = [Instruction.REGISTERS[f"rf{i}"] for i in range(64)]
