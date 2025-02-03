@@ -21,6 +21,7 @@
 # SOFTWARE.
 import ctypes
 import functools
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from types import TracebackType
 from typing import Annotated, Any, Concatenate, Final, Self, cast
@@ -1110,7 +1111,7 @@ class ALUInstruction(ctypes.Union):
         return int(self.raw)
 
 
-class ALUOp:
+class ALUOp(ABC):
     OPERATIONS: dict[str, Operation] = {}
 
     _name: str
@@ -1161,8 +1162,8 @@ class ALUOp:
         if sig is not None:
             self.sigs.add(sig)
 
-    def pack(self: Self) -> int:
-        assert False, "Bug: Not implemented"
+    @abstractmethod
+    def pack(self: Self) -> int: ...
 
     @property
     def name(self: Self) -> str:
@@ -1205,8 +1206,16 @@ class ALUOp:
 
 
 class AddALUOp(ALUOp):
-    def __init__(self: Self, opr: str, *args: Any, **kwargs: Any) -> None:
-        super().__init__(opr, *args, **kwargs)
+    def __init__(
+        self: Self,
+        opr: str,
+        dst: Register = Instruction.REGISTERS["null"],
+        src1: int | float | Register | None = None,
+        src2: int | float | Register | None = None,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        super().__init__(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
     def pack(self: Self) -> int:
         op: int = self.op.opcode
@@ -1341,8 +1350,16 @@ class AddALUOp(ALUOp):
 
 
 class MulALUOp(ALUOp):
-    def __init__(self: Self, opr: str, *args: Any, **kwargs: Any) -> None:
-        super().__init__(opr, *args, **kwargs)
+    def __init__(
+        self: Self,
+        opr: str,
+        dst: Register = Instruction.REGISTERS["null"],
+        src1: int | float | Register | None = None,
+        src2: int | float | Register | None = None,
+        cond: str | None = None,
+        sig: Signal | None = None,
+    ) -> None:
+        super().__init__(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
     def pack(self: Self) -> int:
         op = self.op.opcode
