@@ -1,0 +1,45 @@
+name: Run Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    paths:
+      - '.github/workflows/test.yml'
+      - 'src/**'
+      - 'tests/**'
+      - 'examples/**'
+  schedule:
+    - cron: '0 6 * * 1-5'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v4
+      # Install a specific version of uv.
+      # with:
+      #     version: "x.y.z"
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version-file: "pyproject.toml"
+
+    - name: Run format checker
+      run: uvx ruff format --check --diff .
+
+    - name: Run linter
+      run: uvx ruff check --show-fixes .
+
+    - name: Run type checker
+      run: uvx mypy .
+
+    # - name: Run tests requires pi5 runner
+    #   run: uv run pytest -v tests
