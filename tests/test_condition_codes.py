@@ -179,7 +179,7 @@ def test_cond_push_b() -> None:
 
 # `cond = '{and,nor}*'` updates the conditional flag A and it don't affect to B
 @qpu
-def qpu_cond_update(asm: Assembly, cond_update_flags: str) -> None:
+def qpu_cond_update(asm: Assembly, cond_update_flags: list[str]) -> None:
     eidx(rf10, sig=ldunifrf(rf12))
     shl(rf10, rf10, 2)
     add(rf12, rf12, rf10)
@@ -378,7 +378,7 @@ def test_cond_combination() -> None:
 
 # vflx instructions read a condition flag as int16
 @qpu
-def qpu_cond_vflx(asm: Assembly, ops: str) -> None:
+def qpu_cond_vflx(asm: Assembly, ops: list[str]) -> None:
     eidx(rf10, sig=ldunifrf(rf12))
     shl(rf10, rf10, 2)
     add(rf12, rf12, rf10)
@@ -444,7 +444,7 @@ def test_cond_vflx() -> None:
 
 
 @qpu
-def qpu_cond_flx(asm: Assembly, ops: str) -> None:
+def qpu_cond_flx(asm: Assembly, ops: list[str]) -> None:
     eidx(rf10, sig=ldunifrf(rf0))
     nop(sig=ldunifrf(rf1))  # in
     nop(sig=ldunifrf(rf2))  # out

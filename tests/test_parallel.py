@@ -136,7 +136,8 @@ def qpu_parallel(asm: Assembly, thread: Literal[12, 24]) -> None:
 
 
 def test_parallel() -> None:
-    for thread in [12, 24]:
+    n_of_threads: list[Literal[12, 24]] = [12, 24]
+    for thread in n_of_threads:
         with Driver() as drv:
             serial_code = drv.program(lambda asm: qpu_serial(asm, thread))
             parallel_code = drv.program(lambda asm: qpu_parallel(asm, thread))

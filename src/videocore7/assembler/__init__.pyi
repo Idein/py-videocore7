@@ -9,7 +9,7 @@ from _videocore7.assembler import LabelNameSpace as LabelNameSpace
 from _videocore7.assembler import Link as Link
 from _videocore7.assembler import LoadSignal as LoadSignal
 from _videocore7.assembler import LoopHelper
-from _videocore7.assembler import Reference as Reference
+from _videocore7.assembler import ReferenceHelper as ReferenceHelper
 from _videocore7.assembler import Register as Register
 from _videocore7.assembler import Signal as Signal
 from _videocore7.assembler import TMULookUpConfig as TMULookUpConfig
@@ -19,7 +19,7 @@ from _videocore7.assembler import qpu as qpu
 # Structured programming helpers
 loop: LoopHelper
 L: Label
-R: Reference
+R: ReferenceHelper
 b: Callable[..., Branch]  # TODO: typing
 link: Link
 namespace: Callable[[str], LabelNameSpace]
