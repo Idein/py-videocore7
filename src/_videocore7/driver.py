@@ -39,8 +39,7 @@ class DriverError(Exception):
 class Array[T: np.generic](npt.NDArray[T]):
     _address: int
 
-    def __new__(cls: type["Array[T]"], *args: Any, **kwargs: Any) -> "Array[T]":
-        phyaddr = kwargs.pop("phyaddr")
+    def __new__(cls: type["Array[T]"], *args: Any, phyaddr: int, **kwargs: Any) -> "Array[T]":
         obj: Array[T] = super().__new__(cls, *args, **kwargs)
         obj._address = phyaddr
         return obj
@@ -122,7 +121,7 @@ class Dispatcher:
 
     def dispatch(
         self: Self,
-        code: Any,
+        code: Array[np.uint64],
         uniforms: int | None = None,
         workgroup: tuple[int, int, int] = (16, 1, 1),
         wgs_per_sg: int = 16,
@@ -226,12 +225,14 @@ class Driver:
         if self.memory.phyaddr is None:
             raise DriverError("Memory is not initialized")
 
-        offset = self.data_pos
-        kwargs["phyaddr"] = self.memory.phyaddr + offset
-        kwargs["buffer"] = self.memory.buffer
-        kwargs["offset"] = offset
-
-        arr = Array[T](*args, **kwargs)
+        ofs = self.data_pos
+        arr = Array[T](
+            *args,
+            phyaddr=self.memory.phyaddr + ofs,
+            buffer=self.memory.buffer,
+            offset=ofs,
+            **kwargs,
+        )
 
         self.data_pos += arr.nbytes
         if self.data_pos > self.data_area_base + self.data_area_size:
@@ -243,12 +244,18 @@ class Driver:
         for insn in code:
             print(f"{insn:#018x}", file=file)
 
-    def dump_program(self: Self, prog: Any, *args: Any, file: IO[str] = sys.stdout, **kwargs: Any) -> None:
+    def dump_program[**P, R](
+        self: Self,
+        prog: Callable[Concatenate[Assembly, P], R],
+        file: IO[str] = sys.stdout,
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
         self.dump_code(assemble(prog, *args, **kwargs), file=file)
 
     def program[**P, R](
         self: Self, prog: Callable[Concatenate[Assembly, P], R] | list[int], *args: P.args, **kwargs: P.kwargs
-    ) -> Any:
+    ) -> Array[np.uint64]:
         asm: list[int]
         if hasattr(prog, "__call__"):
             asm = assemble(prog, *args, **kwargs)
@@ -288,7 +295,7 @@ class Driver:
 
     def execute(
         self: Self,
-        code: Any,
+        code: Array[np.uint64],
         uniforms: int | None = None,
         timeout_sec: int = 10,
         workgroup: tuple[int, int, int] = (16, 1, 1),
