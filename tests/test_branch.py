@@ -125,7 +125,7 @@ def test_branch_abs_imm() -> None:
             nop()
 
         dummy = drv.program(qpu_dummy)
-        code = drv.program(lambda asm: qpu_branch_abs_imm(asm, int(dummy.addresses()[0] + 16 * 8)))
+        code = drv.program(qpu_branch_abs_imm, int(dummy.addresses()[0] + 16 * 8))
         x: Array[np.uint32] = drv.alloc((16,), dtype=np.uint32)
         y: Array[np.uint32] = drv.alloc((16,), dtype=np.uint32)
         unif: Array[np.uint32] = drv.alloc(3, dtype=np.uint32)
@@ -326,7 +326,7 @@ def test_branch_link_reg() -> None:
     for set_subroutine_link, expected in [(False, 2), (True, 1)]:
         for use_link_reg_direct in [False, True]:
             with Driver() as drv:
-                code = drv.program(lambda asm: qpu_branch_link_reg(asm, set_subroutine_link, use_link_reg_direct))
+                code = drv.program(qpu_branch_link_reg, set_subroutine_link, use_link_reg_direct)
                 x: Array[np.uint32] = drv.alloc(16, dtype=np.uint32)
                 y: Array[np.uint32] = drv.alloc((2, 16), dtype=np.uint32)
                 unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)

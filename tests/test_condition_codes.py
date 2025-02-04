@@ -252,7 +252,7 @@ def test_cond_update() -> None:
         return lambda a, b: bin_op(a, not_op(b_op(b)))
 
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_cond_update(asm, cond_update_flags))
+        code = drv.program(qpu_cond_update, cond_update_flags)
         data: Array[np.uint32] = drv.alloc((len(cond_update_flags), 16), dtype=np.uint32)
         unif: Array[np.uint32] = drv.alloc(1, dtype=np.uint32)
 
@@ -429,7 +429,7 @@ def test_cond_vflx() -> None:
     ]
 
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_cond_vflx(asm, ops))
+        code = drv.program(qpu_cond_vflx, ops)
         data: Array[np.int16] = drv.alloc((len(ops), 32), dtype=np.int16)
         unif: Array[np.uint32] = drv.alloc(1, dtype=np.uint32)
 
@@ -491,7 +491,7 @@ def test_cond_flx() -> None:
     ]
 
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_cond_flx(asm, ops))
+        code = drv.program(qpu_cond_flx, ops)
         x1: Array[np.uint32] = drv.alloc((16,), dtype=np.uint32)
         x2: Array[np.int32] = drv.alloc((16,), dtype=np.int32)
         y: Array[np.uint32] = drv.alloc((len(ops), 16), dtype=np.uint32)

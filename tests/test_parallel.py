@@ -139,8 +139,8 @@ def test_parallel() -> None:
     n_of_threads: list[Literal[12, 24]] = [12, 24]
     for thread in n_of_threads:
         with Driver() as drv:
-            serial_code = drv.program(lambda asm: qpu_serial(asm, thread))
-            parallel_code = drv.program(lambda asm: qpu_parallel(asm, thread))
+            serial_code = drv.program(qpu_serial, thread)
+            parallel_code = drv.program(qpu_parallel, thread)
             x: Array[np.uint32] = drv.alloc((thread, 16), dtype=np.uint32)
             ys: Array[np.uint32] = drv.alloc((thread, 16), dtype=np.uint32)
             yp: Array[np.uint32] = drv.alloc((thread, 16), dtype=np.uint32)

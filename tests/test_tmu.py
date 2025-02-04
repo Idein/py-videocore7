@@ -176,7 +176,7 @@ def test_tmu_multiple_interleaved_transform_write(
     #   [ -1, -1, -1, interleaved.T, -1, -1, -1, -1] ]
     #
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_tmu_multiple_interleaved_transform_write(asm, use_n_vec, interleave))
+        code = drv.program(qpu_tmu_multiple_interleaved_transform_write, use_n_vec, interleave)
         data: Array[np.int32] = drv.alloc(expected.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
 
@@ -263,7 +263,7 @@ def test_tmu_multiple_write_with_uniform_config(
     #   [ -1, -1, -1, interleaved.T, -1, -1, -1, -1] ]
     #
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_tmu_multiple_write_with_uniform_config(asm, use_n_vec, interleave))
+        code = drv.program(qpu_tmu_multiple_write_with_uniform_config, use_n_vec, interleave)
         data: Array[np.int32] = drv.alloc(expected.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(3, dtype=np.uint32)
 
@@ -427,7 +427,7 @@ def test_tmu_multiple_interleaved_transform_read(  # FIXME: This test make other
     #   [ -1, -1, -1, interleaved.T, -1, -1, -1, -1] ]
     #
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_tmu_multiple_interleaved_transform_read(asm, use_n_vec, interleave))
+        code = drv.program(qpu_tmu_multiple_interleaved_transform_read, use_n_vec, interleave)
         src: Array[np.int32] = drv.alloc(source.shape, dtype=np.int32)
         dst: Array[np.int32] = drv.alloc((use_n_vec, 16), dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(4, dtype=np.uint32)
@@ -524,7 +524,7 @@ def test_tmu_multiple_read_with_uniform_config(
     #   [ -1, -1, -1, interleaved.T, -1, -1, -1, -1] ]
     #
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_tmu_multiple_read_with_uniform_config(asm, use_n_vec, interleave))
+        code = drv.program(qpu_tmu_multiple_read_with_uniform_config, use_n_vec, interleave)
         src: Array[np.int32] = drv.alloc(source.shape, dtype=np.int32)
         dst: Array[np.int32] = drv.alloc((use_n_vec, 16), dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(4, dtype=np.uint32)

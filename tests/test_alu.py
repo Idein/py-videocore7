@@ -175,7 +175,7 @@ def boilerplate_binary_ops(
     with Driver() as drv:
         cases = list(itertools.product(bin_ops, dst_ops, src1_ops, src2_ops))
 
-        code = drv.program(lambda asm: qpu_binary_ops(asm, bin_ops, dst_ops, src1_ops, src2_ops))
+        code = drv.program(qpu_binary_ops, bin_ops, dst_ops, src1_ops, src2_ops)
         x1: Array[Any] = drv.alloc((16 * 4 // np.dtype(src1_dtype).itemsize,), dtype=src1_dtype)
         x2: Array[Any] = drv.alloc((16 * 4 // np.dtype(src2_dtype).itemsize,), dtype=src2_dtype)
         y: Array[Any] = drv.alloc((len(cases), 16 * 4 // np.dtype(dst_dtype).itemsize), dtype=dst_dtype)
@@ -385,7 +385,7 @@ def boilerplate_unary_ops(
     with Driver() as drv:
         cases = list(itertools.product(uni_ops, dst_ops, src_ops))
 
-        code = drv.program(lambda asm: qpu_unary_ops(asm, uni_ops, dst_ops, src_ops))
+        code = drv.program(qpu_unary_ops, uni_ops, dst_ops, src_ops)
         x: Array[Any] = drv.alloc((16 * 4 // np.dtype(src_dtype).itemsize,), dtype=src_dtype)
         y: Array[Any] = drv.alloc((len(cases), 16 * 4 // np.dtype(dst_dtype).itemsize), dtype=dst_dtype)
         unif: Array[np.uint32] = drv.alloc(3, dtype=np.uint32)
