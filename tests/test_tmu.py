@@ -96,6 +96,13 @@ def qpu_tmu_multiple_interleaved_transform_write(asm: Assembly, use_n_vec: int, 
     reg_stride = rf1
     reg_tmu_config = rf2
 
+    mov(rf11, 4)
+    shl(rf11, rf11, 2)
+    eidx(rf10)
+    for _ in range(use_n_vec):
+        mov(tmud, rf10)
+        add(rf10, rf10, rf11)
+
     nop(sig=ldunifrf(reg_addr))
     bxor(rf3, rf3, rf3, sig=ldunifrf(reg_stride))
     if use_n_vec > 1:
@@ -110,13 +117,6 @@ def qpu_tmu_multiple_interleaved_transform_write(asm: Assembly, use_n_vec: int, 
         bxor(reg_tmu_config, -1, rf3)
         # reg_tmu_config = TMULookUpConfig.sequential_read_write_vec(use_n_vec)
         mov(tmuc, reg_tmu_config)
-
-    mov(rf11, 4)
-    shl(rf11, rf11, 2)
-    eidx(rf10)
-    for _ in range(use_n_vec):
-        mov(tmud, rf10)
-        add(rf10, rf10, rf11)
 
     eidx(rf10)
     shl(rf10, rf10, 2)
@@ -142,7 +142,7 @@ def qpu_tmu_multiple_interleaved_transform_write(asm: Assembly, use_n_vec: int, 
     pad_l=hypothesis.strategies.integers(min_value=0, max_value=15),
     pad_r=hypothesis.strategies.integers(min_value=0, max_value=15),
 )
-def test_tmu_multiple_interleaved_transform_write(  # FIXME: This test make other tests hang.
+def test_tmu_multiple_interleaved_transform_write(
     use_n_vec: int,
     interleave: int,
     pad_u: int,
@@ -187,13 +187,6 @@ def test_tmu_multiple_interleaved_transform_write(  # FIXME: This test make othe
 
         drv.execute(code, unif.addresses()[0])
 
-        print("------------------------------------------------")
-        print(use_n_vec, interleave, pad_u, pad_l, pad_r)
-        print("[actual]")
-        print(data)
-        print("[expected]")
-        print(expected)
-
         assert np.all(data == expected)
 
 
@@ -202,9 +195,6 @@ def qpu_tmu_multiple_write_with_uniform_config(asm: Assembly, use_n_vec: int, in
     reg_addr = rf0
     reg_stride = rf1
 
-    nop(sig=ldunifrf(reg_addr))
-    nop(sig=ldunifrf(reg_stride))
-
     mov(rf11, 4)
     shl(rf11, rf11, 2)
     eidx(rf10)
@@ -212,11 +202,15 @@ def qpu_tmu_multiple_write_with_uniform_config(asm: Assembly, use_n_vec: int, in
         mov(tmud, rf10)
         add(rf10, rf10, rf11)
 
+    nop(sig=ldunifrf(reg_addr))
+    nop(sig=ldunifrf(reg_stride))
+
     eidx(rf10)
     shl(rf10, rf10, 2)
     umul24(rf10, rf10, interleave + 1)
     umul24(rf10, rf10, reg_stride)
     add(tmuau, rf10, reg_addr)
+    tmuwt()
 
     nop(sig=thrsw)
     nop(sig=thrsw)
@@ -235,7 +229,7 @@ def qpu_tmu_multiple_write_with_uniform_config(asm: Assembly, use_n_vec: int, in
     pad_l=hypothesis.strategies.integers(min_value=0, max_value=15),
     pad_r=hypothesis.strategies.integers(min_value=0, max_value=15),
 )
-def _test_tmu_multiple_write_with_uniform_config(  # FIXME: This test make other tests hang.
+def test_tmu_multiple_write_with_uniform_config(
     use_n_vec: int,
     interleave: int,
     pad_u: int,
@@ -298,6 +292,7 @@ def qpu_tmu_single_read(asm: Assembly) -> None:
     shl(rf13, rf13, 4)
 
     with loop as l:  # noqa: E741
+        mov(tmuc, -1)  # reset TMU config
         mov(tmua, rf11, sig=thrsw)
         nop()
         sub(rf10, rf10, 1, cond="pushz")
