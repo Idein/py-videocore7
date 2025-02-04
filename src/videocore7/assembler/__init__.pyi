@@ -1,4 +1,4 @@
-from typing import overload
+from typing import Final, overload
 
 from _videocore7.assembler import ALUWithoutSMIMM as ALUWithoutSMIMM
 from _videocore7.assembler import ALUWithSMIMM as ALUWithSMIMM
@@ -18,9 +18,9 @@ from _videocore7.assembler import assemble as assemble
 from _videocore7.assembler import qpu as qpu
 
 # Structured programming helpers
-loop: LoopHelper
-L: Label
-R: ReferenceHelper
+loop: Final[LoopHelper]
+L: Final[Label]
+R: Final[ReferenceHelper]
 
 def b(
     src: int | Register | Reference | Link | None,
@@ -30,125 +30,125 @@ def b(
     set_link: bool = False,
 ) -> Branch: ...
 
-link: Link
+link: Final[Link]
 
 def namespace(name: str) -> LabelNameSpace: ...
 
 # Signals
-thrsw: Signal
-ldunif: Signal
-ldunifa: Signal
-ldunifrf: LoadSignal
-ldunifarf: LoadSignal
-ldtmu: LoadSignal
-ldvary: LoadSignal
-ldvpm: Signal
-ldtlb: LoadSignal
-ldtlbu: LoadSignal
-ucb: Signal
-wrtmuc: Signal
+thrsw: Final[Signal]
+ldunif: Final[Signal]
+ldunifa: Final[Signal]
+ldunifrf: Final[LoadSignal]
+ldunifarf: Final[LoadSignal]
+ldtmu: Final[LoadSignal]
+ldvary: Final[LoadSignal]
+ldvpm: Final[Signal]
+ldtlb: Final[LoadSignal]
+ldtlbu: Final[LoadSignal]
+ucb: Final[Signal]
+wrtmuc: Final[Signal]
 
 # Registers
-quad: Register
-null: Register
-tlb: Register
-tlbu: Register
-unifa: Register
-tmul: Register
-tmud: Register
-tmua: Register
-tmuau: Register
-vpm: Register
-vpmu: Register
-sync: Register
-syncu: Register
-syncb: Register
-tmuc: Register
-tmus: Register
-tmut: Register
-tmur: Register
-tmui: Register
-tmub: Register
-tmudref: Register
-tmuoff: Register
-tmuscm: Register
-tmusf: Register
-tmuslod: Register
-tmuhs: Register
-tmuhscm: Register
-tmuhsf: Register
-tmuhslod: Register
-rep: Register
+quad: Final[Register]
+null: Final[Register]
+tlb: Final[Register]
+tlbu: Final[Register]
+unifa: Final[Register]
+tmul: Final[Register]
+tmud: Final[Register]
+tmua: Final[Register]
+tmuau: Final[Register]
+vpm: Final[Register]
+vpmu: Final[Register]
+sync: Final[Register]
+syncu: Final[Register]
+syncb: Final[Register]
+tmuc: Final[Register]
+tmus: Final[Register]
+tmut: Final[Register]
+tmur: Final[Register]
+tmui: Final[Register]
+tmub: Final[Register]
+tmudref: Final[Register]
+tmuoff: Final[Register]
+tmuscm: Final[Register]
+tmusf: Final[Register]
+tmuslod: Final[Register]
+tmuhs: Final[Register]
+tmuhscm: Final[Register]
+tmuhsf: Final[Register]
+tmuhslod: Final[Register]
+rep: Final[Register]
 
 # Register Alias
-broadcast: Register  # rep
-quad_broadcast: Register  # quad
+broadcast: Final[Register]  # rep
+quad_broadcast: Final[Register]  # quad
 
-rf: list[Register]
-rf0: Register
-rf1: Register
-rf2: Register
-rf3: Register
-rf4: Register
-rf5: Register
-rf6: Register
-rf7: Register
-rf8: Register
-rf9: Register
-rf10: Register
-rf11: Register
-rf12: Register
-rf13: Register
-rf14: Register
-rf15: Register
-rf16: Register
-rf17: Register
-rf18: Register
-rf19: Register
-rf20: Register
-rf21: Register
-rf22: Register
-rf23: Register
-rf24: Register
-rf25: Register
-rf26: Register
-rf27: Register
-rf28: Register
-rf29: Register
-rf30: Register
-rf31: Register
-rf32: Register
-rf33: Register
-rf34: Register
-rf35: Register
-rf36: Register
-rf37: Register
-rf38: Register
-rf39: Register
-rf40: Register
-rf41: Register
-rf42: Register
-rf43: Register
-rf44: Register
-rf45: Register
-rf46: Register
-rf47: Register
-rf48: Register
-rf49: Register
-rf50: Register
-rf51: Register
-rf52: Register
-rf53: Register
-rf54: Register
-rf55: Register
-rf56: Register
-rf57: Register
-rf58: Register
-rf59: Register
-rf60: Register
-rf61: Register
-rf62: Register
-rf63: Register
+rf: Final[list[Register]]
+rf0: Final[Register]
+rf1: Final[Register]
+rf2: Final[Register]
+rf3: Final[Register]
+rf4: Final[Register]
+rf5: Final[Register]
+rf6: Final[Register]
+rf7: Final[Register]
+rf8: Final[Register]
+rf9: Final[Register]
+rf10: Final[Register]
+rf11: Final[Register]
+rf12: Final[Register]
+rf13: Final[Register]
+rf14: Final[Register]
+rf15: Final[Register]
+rf16: Final[Register]
+rf17: Final[Register]
+rf18: Final[Register]
+rf19: Final[Register]
+rf20: Final[Register]
+rf21: Final[Register]
+rf22: Final[Register]
+rf23: Final[Register]
+rf24: Final[Register]
+rf25: Final[Register]
+rf26: Final[Register]
+rf27: Final[Register]
+rf28: Final[Register]
+rf29: Final[Register]
+rf30: Final[Register]
+rf31: Final[Register]
+rf32: Final[Register]
+rf33: Final[Register]
+rf34: Final[Register]
+rf35: Final[Register]
+rf36: Final[Register]
+rf37: Final[Register]
+rf38: Final[Register]
+rf39: Final[Register]
+rf40: Final[Register]
+rf41: Final[Register]
+rf42: Final[Register]
+rf43: Final[Register]
+rf44: Final[Register]
+rf45: Final[Register]
+rf46: Final[Register]
+rf47: Final[Register]
+rf48: Final[Register]
+rf49: Final[Register]
+rf50: Final[Register]
+rf51: Final[Register]
+rf52: Final[Register]
+rf53: Final[Register]
+rf54: Final[Register]
+rf55: Final[Register]
+rf56: Final[Register]
+rf57: Final[Register]
+rf58: Final[Register]
+rf59: Final[Register]
+rf60: Final[Register]
+rf61: Final[Register]
+rf62: Final[Register]
+rf63: Final[Register]
 
 # Add ALU instructions
 @overload
