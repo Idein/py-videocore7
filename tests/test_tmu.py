@@ -334,20 +334,35 @@ def test_tmu_single_read(n: int) -> None:
 
 
 @qpu
-def qpu_tmu_multiple_read_with_uniform_config(asm: Assembly, use_n_vec: int, interleave: int) -> None:
+def qpu_tmu_multiple_interleaved_transform_read(asm: Assembly, use_n_vec: int, interleave: int) -> None:
     reg_src_addr = rf0
     reg_dst_addr = rf1
     reg_stride = rf2
+    reg_tmu_config = rf3
 
     nop(sig=ldunifrf(reg_src_addr))
     nop(sig=ldunifrf(reg_dst_addr))
     nop(sig=ldunifrf(reg_stride))
 
+    bxor(rf3, rf3, rf3)
+    if use_n_vec > 1:
+        if use_n_vec >= 2:
+            bor(rf3, rf3, 5)
+        if use_n_vec >= 3:
+            shl(rf3, rf3, 8)
+            bor(rf3, rf3, 4)
+        if use_n_vec >= 4:
+            shl(rf3, rf3, 8)
+            bor(rf3, rf3, 3)
+        bxor(reg_tmu_config, -1, rf3)
+        # reg_tmu_config = TMULookUpConfig.sequential_read_write_vec(use_n_vec)
+        mov(tmuc, reg_tmu_config)
+
     eidx(rf10)
     shl(rf10, rf10, 2)
     umul24(rf10, rf10, interleave + 1)
     umul24(rf10, rf10, reg_stride)
-    add(tmuau if use_n_vec > 1 else tmua, reg_src_addr, rf10, sig=thrsw)
+    add(tmua, reg_src_addr, rf10, sig=thrsw)
     nop()
     nop()
     for i in range(use_n_vec):
@@ -382,7 +397,104 @@ def qpu_tmu_multiple_read_with_uniform_config(asm: Assembly, use_n_vec: int, int
     pad_l=hypothesis.strategies.integers(min_value=0, max_value=15),
     pad_r=hypothesis.strategies.integers(min_value=0, max_value=15),
 )
-def _test_tmu_multiple_read_with_uniform_config(  # FIXME: This test make other tests hang.
+def test_tmu_multiple_interleaved_transform_read(  # FIXME: This test make other tests hang.
+    use_n_vec: int,
+    interleave: int,
+    pad_u: int,
+    pad_l: int,
+    pad_r: int,
+) -> None:
+    expected = np.arange(use_n_vec * 16).reshape(use_n_vec, 16).astype(np.int32)
+    # expected (ase: use_n_vec = 4):
+    # [ [  0,  1,  2, ..., 15],
+    #   [ 16, 17, 18, ..., 31],
+    #   [ 32, 33, 34, ..., 47],
+    #   [ 48, 49, 50, ..., 63] ]
+    """Read with N-vec transpose and strided."""
+    source = -np.ones((pad_u + 16 + 15 * interleave, pad_l + use_n_vec + pad_r), dtype=np.int32)
+    source[pad_u :: interleave + 1, pad_l : pad_l + use_n_vec] = expected.T
+    # interleaved (case: interleave = 1):
+    # [ [  0, -1,  1, -1,  2, -1, ..., 15],
+    #   [ 16, -1, 17, -1, 18, -1, ..., 31],
+    #   [ 32, -1, 33, -1, 34, -1, ..., 47],
+    #   [ 48, -1, 49, -1, 50, -1, ..., 63] ]
+    #
+    # expected (case: pad_u = 2, pad_l = 3, pad_r = 4):
+    # [ [ -1, -1, -1,      ...     , -1, -1, -1, -1],
+    #   [ -1, -1, -1,      ...     , -1, -1, -1, -1],
+    #         .                             .
+    #         .                             .
+    #   [ -1, -1, -1, interleaved.T, -1, -1, -1, -1] ]
+    #
+    with Driver() as drv:
+        code = drv.program(lambda asm: qpu_tmu_multiple_interleaved_transform_read(asm, use_n_vec, interleave))
+        src: Array[np.int32] = drv.alloc(source.shape, dtype=np.int32)
+        dst: Array[np.int32] = drv.alloc((use_n_vec, 16), dtype=np.int32)
+        unif: Array[np.uint32] = drv.alloc(4, dtype=np.uint32)
+
+        src[:] = source
+        dst[:] = -1
+
+        unif[0] = src.addresses()[pad_u, pad_l]
+        unif[1] = dst.addresses()[0, 0]
+        unif[2] = source.shape[1]
+        unif[3] = TMULookUpConfig.sequential_read_write_vec(use_n_vec)
+
+        drv.execute(code, unif.addresses()[0])
+
+        assert np.all(dst == expected)
+
+
+@qpu
+def qpu_tmu_multiple_read_with_uniform_config(asm: Assembly, use_n_vec: int, interleave: int) -> None:
+    reg_src_addr = rf0
+    reg_dst_addr = rf1
+    reg_stride = rf2
+
+    nop(sig=ldunifrf(reg_src_addr))
+    nop(sig=ldunifrf(reg_dst_addr))
+    nop(sig=ldunifrf(reg_stride))
+
+    eidx(rf10)
+    shl(rf10, rf10, 2)
+    umul24(rf10, rf10, interleave + 1)
+    umul24(rf10, rf10, reg_stride)
+    add(tmuau, reg_src_addr, rf10, sig=thrsw)
+    nop()
+    nop()
+    for i in range(use_n_vec):
+        nop(sig=ldtmu(rf[10 + i]))
+
+    eidx(rf14)
+    shl(rf14, rf14, 2)
+    add(reg_dst_addr, reg_dst_addr, rf14)
+    mov(rf14, 4)
+    shl(rf14, rf14, 4)
+
+    for i in range(use_n_vec):
+        mov(tmud, rf[10 + i])
+        mov(tmua, reg_dst_addr)
+        add(reg_dst_addr, reg_dst_addr, rf14)
+        tmuwt()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+@hypothesis.given(
+    use_n_vec=hypothesis.strategies.integers(min_value=1, max_value=4),
+    interleave=hypothesis.strategies.integers(min_value=0, max_value=2),
+    pad_u=hypothesis.strategies.integers(min_value=0, max_value=15),
+    pad_l=hypothesis.strategies.integers(min_value=0, max_value=15),
+    pad_r=hypothesis.strategies.integers(min_value=0, max_value=15),
+)
+def test_tmu_multiple_read_with_uniform_config(
     use_n_vec: int,
     interleave: int,
     pad_u: int,
@@ -437,6 +549,7 @@ def _test_tmu_multiple_read_with_uniform_config(  # FIXME: This test make other 
 def qpu_tmu_keeps_memory_consistency(asm: Assembly) -> None:
     nop(sig=ldunifrf(rf10))
 
+    mov(tmuc, -1)
     mov(tmua, rf10, sig=thrsw)
     nop()
     nop()
@@ -487,6 +600,7 @@ def qpu_tmu_read_tmu_write_uniform_read(asm: Assembly) -> None:
     add(rf0, rf0, rf10, sig=ldunifrf(rf1))
     add(rf1, rf1, rf10)
 
+    mov(tmuc, -1)
     mov(tmua, rf0, sig=thrsw)
     nop()
     nop()
