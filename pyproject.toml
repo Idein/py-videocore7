@@ -17,11 +17,14 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["videocore7"]
+packages = [
+  "videocore7",
+  "videocore7.assembler",
+  "videocore7.driver",
+  "videocore7.v3d",
+  "_videocore7",
+]
 package-dir = {"" = "src"}
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/videocore7"]
 
 [tool.ruff]
 lint.select = [
