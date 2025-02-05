@@ -35,7 +35,7 @@ lint.select = [
 ]
 lint.ignore = ["F403", "F405", "D203", "D213"]
 line-length = 119
-exclude = [".venv", ".git", "__pycache__",]
+exclude = [".venv", ".git", "__pycache__"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 119
@@ -44,6 +44,7 @@ max-line-length = 119
 "__init__.py" = ["F401", "D"] # __init__.pyは未使用インポートとドキュメントを無視
 "tests/test_*.py" = ["D"] # テストファイルはドキュメントを無視
 "examples/*.py" = ["D"] # exampleファイルはドキュメントを無視
+"setup.py" = ["D"] # setup.pyはドキュメントを無視
 
 [dependency-groups]
 dev = [
