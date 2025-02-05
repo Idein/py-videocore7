@@ -567,15 +567,25 @@ class RegisterMapping:
 
         fd = os.open("/dev/mem", os.O_RDWR)
 
-        # XXX: Should use bcm_host_get_peripheral_address for the base address
-        # on userland, and consult /proc/device-tree/__symbols__/v3d and then
-        # /proc/device-tree/v3dbus/v3d@7ec04000/{reg-names,reg} for the offsets
-        # in the future.
+        path: str
+        names: list[str]
+        reg_addrs: dict[str, tuple[int, int]] = {}
+        with open("/proc/device-tree/__symbols__/v3d", "rb") as f:
+            path = f.read().decode("utf-8").split("\0")[0]
+        with open("/proc/device-tree" + path + "/reg-names", "rb") as f:
+            names = [name for name in f.read().decode("utf-8").split("\0") if len(name) > 0]
+        with open("/proc/device-tree" + path + "/reg", "rb") as f:
+            for name in names:
+                addr = int.from_bytes(f.read(8))
+                size = int.from_bytes(f.read(8))
+                reg_addrs[name] = (addr, size)
 
+        if "hub" not in reg_addrs:
+            raise RuntimeError("Failed to get hub register addresses.")
         reg_rw = _RegisterReaderWriter()
         map_hub = mmap.mmap(
-            offset=0x1002000000,  # from bcm2712.dtsi
-            length=0x4000,
+            offset=reg_addrs["hub"][0],
+            length=reg_addrs["hub"][1],
             fileno=fd,
             flags=mmap.MAP_SHARED,
             prot=mmap.PROT_READ | mmap.PROT_WRITE,
@@ -586,9 +596,11 @@ class RegisterMapping:
 
         self._core = []
         for core in range(RegisterMapping.NUM_OF_CORES):
+            if f"core{core}" not in reg_addrs:
+                raise RuntimeError(f"Failed to get core{core} register addresses.")
             map_core = mmap.mmap(
-                offset=0x1002008000 + 0x6000 * core,
-                length=0x6000,
+                offset=reg_addrs[f"core{core}"][0],
+                length=reg_addrs[f"core{core}"][1],
                 fileno=fd,
                 flags=mmap.MAP_SHARED,
                 prot=mmap.PROT_READ | mmap.PROT_WRITE,
