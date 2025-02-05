@@ -25,21 +25,13 @@ from videocore7.v3d import *
 def test_v3d_regs() -> None:
     with DRM_V3D() as drm:
         try:
-            with RegisterMapping() as regmap:
-                print(regmap[HUB.UIFCFG], drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_UIFCFG))
-                print(regmap[HUB.IDENT1], drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT1))
-                print(regmap[HUB.IDENT2], drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT2))
-                print(regmap[HUB.IDENT3], drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT3))
-                print(regmap[CORE.IDENT0, 0], drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT0))
-                print(regmap[CORE.IDENT1, 0], drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT1))
-                print(regmap[CORE.IDENT2, 0], drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT2))
-
-                assert regmap[HUB.UIFCFG] == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_UIFCFG)
-                assert regmap[HUB.IDENT1] == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT1)
-                assert regmap[HUB.IDENT2] == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT2)
-                assert regmap[HUB.IDENT3] == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT3)
-                assert regmap[CORE.IDENT0, 0] == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT0)
-                assert regmap[CORE.IDENT1, 0] == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT1)
-                assert regmap[CORE.IDENT2, 0] == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT2)
+            with RegisterMapping() as reg:
+                assert reg.HUB.UIFCFG.value == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_UIFCFG)
+                assert reg.HUB.IDENT1.value == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT1)
+                assert reg.HUB.IDENT2.value == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT2)
+                assert reg.HUB.IDENT3.value == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_HUB_IDENT3)
+                assert reg.CORE[0].IDENT0.value == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT0)
+                assert reg.CORE[0].IDENT1.value == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT1)
+                assert reg.CORE[0].IDENT2.value == drm.v3d_get_param(DRM_V3D.V3D_PARAM_V3D_CORE0_IDENT2)
         except PermissionError:
             print("Skipping tests because of a lack of root privilege")
