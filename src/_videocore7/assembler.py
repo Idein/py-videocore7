@@ -1328,6 +1328,9 @@ class AddALUOp(ALUOp):
                 raddr_b = pack | (a_unpack << 2)
             case "nop":
                 pass
+            case "rotate" | "quad_rotate" | "shuffle":
+                if self.dst.name in ["rep", "quad"]:
+                    raise AssembleError(f'"{self.name}" rejects "{self.dst.name}" dst')
             case _:
                 if self.dst.pack_modifier.name != "none":
                     raise AssembleError(f'"{self.name}" rejects dst with "{self.dst.pack_modifier.name}" modifier')

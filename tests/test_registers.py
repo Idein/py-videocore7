@@ -18,7 +18,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import hypothesis
 import numpy as np
 
 from videocore7.assembler import *
@@ -57,48 +56,6 @@ def test_regs_rep() -> None:
         drv.execute(code, unif.addresses()[0])
 
         assert np.all(dst == unif[0])
-
-
-@qpu
-def qpu_regs_rep_with_rotate(asm: Assembly, work: bool) -> None:
-    nop(sig=ldunifrf(rf1))
-
-    mov(rf0, -1)
-    eidx(rf2)
-    if work:
-        rotate(rf2, rf2, 1)
-        mov(rep, rf2)
-    else:
-        rotate(rep, rf2, 1)
-    mov(tmud, rf0)  # if rotate(rep,..) works -> 1, doesn't work -> -1 = 0xFFFFFFFF.
-
-    eidx(rf10)
-    shl(rf10, rf10, 2)
-    add(tmua, rf1, rf10)
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
-
-
-@hypothesis.given(work=hypothesis.strategies.booleans())
-def test_regs_rep_with_rotate(work: bool) -> None:
-    with Driver() as drv:
-        code = drv.program(qpu_regs_rep_with_rotate, work)
-        dst: Array[np.uint32] = drv.alloc(16, dtype=np.uint32)
-        unif: Array[np.uint32] = drv.alloc(1, dtype=np.uint32)
-
-        unif[0] = dst.addresses()[0]
-
-        drv.execute(code, unif.addresses()[0])
-
-        assert np.all(dst == [0xFFFFFFFF, 1][work])
 
 
 @qpu
