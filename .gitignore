@@ -1,3 +1,6 @@
+# setuptools-scm generate file
+src/_videocore7/_version.py
+
 # Python-generated files
 __pycache__/
 *.py[oc]

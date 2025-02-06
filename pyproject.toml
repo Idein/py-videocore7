@@ -1,6 +1,5 @@
 [project]
 name = "py-videocore7"
-version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [
@@ -11,24 +10,20 @@ dependencies = [
     "ioctl-opt>=1.3",
     "numpy>=2.2.2",
 ]
+dynamic = ["version"]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = [
-  "videocore7",
-  "videocore7.assembler",
-  "videocore7.driver",
-  "videocore7.v3d",
-  "_videocore7",
-  "_videocore7.readwrite4",
-]
-package-dir = {"" = "src"}
-ext-modules = [
-    {name = "_videocore7.readwrite4", sources = ["src/_videocore7/readwrite4/module.c"]}
-]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+version_file = "src/_videocore7/_version.py"
+
+[tool.setuptools.dynamic]
+version = {attr = "_videocore7._version.__version__"} # refer genetated version by setuptools-scm
 
 [tool.ruff]
 lint.select = [
