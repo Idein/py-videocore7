@@ -17,46 +17,13 @@
 
 import mmap
 import os
-from collections.abc import Callable
-from ctypes import c_uint32, c_void_p, cdll
-from importlib.machinery import EXTENSION_SUFFIXES
-from pathlib import Path
+from ctypes import c_uint32, c_void_p
 from types import TracebackType
 from typing import Final, Protocol, Self
 
 import numpy as np
 
-
-class _RegisterReaderWriter:
-    _read4: Callable[[c_void_p], c_uint32]
-    _write4: Callable[[c_void_p, c_uint32], None]
-
-    def __init__(self: Self) -> None:
-        stem = Path(__file__).parent / "readwrite4"
-        for suffix in EXTENSION_SUFFIXES:
-            try:
-                lib = cdll.LoadLibrary(str(stem.with_suffix(suffix)))
-            except OSError:
-                continue
-            else:
-                break
-        else:
-            raise Exception("readwrite4 library is not found." + " Your installation seems to be broken.")
-
-        self._read4 = lib.read4
-        self._write4 = lib.write4
-        del stem, lib
-
-        self._read4.argtypes = [c_void_p]
-        self._read4.restype = c_uint32
-        self._write4.argtypes = [c_void_p, c_uint32]
-        self._write4.restype = None
-
-    def read4(self: Self, ptr: c_void_p) -> c_uint32:
-        return self._read4(ptr)
-
-    def write4(self: Self, ptr: c_void_p, value: c_uint32) -> None:
-        self._write4(ptr, value)
+from _videocore7.readwrite4 import read4, write4
 
 
 class Register(Protocol):
@@ -67,45 +34,41 @@ class Register(Protocol):
 
 
 class HubRegister:
-    _reg_rw: _RegisterReaderWriter
     _ptr: int
     _offset: int
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, offset: int) -> None:
-        self._reg_rw = reg_rw
+    def __init__(self: Self, ptr: int, offset: int) -> None:
         self._ptr = ptr
         self._offset = offset
 
     @property
     def value(self: Self) -> int:
-        return int(self._reg_rw.read4(c_void_p(self._ptr + self._offset)))
+        return int(read4(c_void_p(self._ptr + self._offset)))
 
     @value.setter
     def value(self: Self, value: int) -> None:
-        self._reg_rw.write4(c_void_p(self._ptr + self._offset), c_uint32(value))
+        write4(c_void_p(self._ptr + self._offset), c_uint32(value))
 
     def _proof_compliant(self: Self) -> None:
         _proof_register: Register = self
 
 
 class PerCoreRegister:
-    _reg_rw: _RegisterReaderWriter
     _ptr: int
     _offset: int
     _core_id: int
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, offset: int, core_id: int) -> None:
-        self._reg_rw = reg_rw
+    def __init__(self: Self, ptr: int, offset: int, core_id: int) -> None:
         self._ptr = ptr
         self._offset = offset
 
     @property
     def value(self: Self) -> int:
-        return int(self._reg_rw.read4(c_void_p(self._ptr + self._offset)))
+        return int(read4(c_void_p(self._ptr + self._offset)))
 
     @value.setter
     def value(self: Self, value: int) -> None:
-        self._reg_rw.write4(c_void_p(self._ptr + self._offset), c_uint32(value))
+        write4(c_void_p(self._ptr + self._offset), c_uint32(value))
 
     def _proof_compliant(self: Self) -> None:
         _proof_register: Register = self
@@ -146,8 +109,8 @@ class HubIdent1(HubRegister):
     _rev: Field[Self]
     _tver: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int) -> None:
-        super().__init__(reg_rw, ptr, 0x0000C)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x0000C)
         self._with_mso = Field(self, 19, 19)
         self._with_tsy = Field(self, 18, 18)
         self._with_tfu = Field(self, 17, 17)
@@ -194,8 +157,8 @@ class HubIdent2(HubRegister):
     _mmu: Field[Self]
     _l3c_nkb: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00010)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00010)
         self._mmu = Field(self, 8, 8)
         self._l3c_nkb = Field(self, 7, 0)
 
@@ -212,8 +175,8 @@ class HubIdent3(HubRegister):
     _iprev: Field[Self]
     _ipidx: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00014)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00014)
         self._iprev = Field(self, 15, 8)
         self._ipidx = Field(self, 7, 0)
 
@@ -235,14 +198,14 @@ class Hub:
     _ident3: HubIdent3
     _tfu_cs: HubRegister
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int) -> None:
-        self._axicfg = HubRegister(reg_rw, ptr, 0x00000)
-        self._uifcfg = HubRegister(reg_rw, ptr, 0x00004)
-        self._ident0 = HubRegister(reg_rw, ptr, 0x00008)
-        self._ident1 = HubIdent1(reg_rw, ptr)
-        self._ident2 = HubIdent2(reg_rw, ptr)
-        self._ident3 = HubIdent3(reg_rw, ptr)
-        self._tfu_cs = HubRegister(reg_rw, ptr, 0x00700)
+    def __init__(self: Self, ptr: int) -> None:
+        self._axicfg = HubRegister(ptr, 0x00000)
+        self._uifcfg = HubRegister(ptr, 0x00004)
+        self._ident0 = HubRegister(ptr, 0x00008)
+        self._ident1 = HubIdent1(ptr)
+        self._ident2 = HubIdent2(ptr)
+        self._ident3 = HubIdent3(ptr)
+        self._tfu_cs = HubRegister(ptr, 0x00700)
 
     @property
     def AXICFG(self: Self) -> HubRegister:  # noqa: N802
@@ -276,8 +239,8 @@ class Hub:
 class CoreIdent0(PerCoreRegister):
     _ver: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00000, core_id)
+    def __init__(self: Self, ptr: int, core_id: int) -> None:
+        super().__init__(ptr, 0x00000, core_id)
         self._ver = Field(self, 31, 24)
 
     @property
@@ -293,8 +256,8 @@ class CoreIdent1(PerCoreRegister):
     _nslc: Field[Self]
     _rev: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00004, core_id)
+    def __init__(self: Self, ptr: int, core_id: int) -> None:
+        super().__init__(ptr, 0x00004, core_id)
         self._vpm_size = Field(self, 31, 28)
         self._nsem = Field(self, 23, 16)
         self._ntmu = Field(self, 15, 12)
@@ -330,8 +293,8 @@ class CoreIdent1(PerCoreRegister):
 class CoreIdent2(PerCoreRegister):
     _bcg: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00008, core_id)
+    def __init__(self: Self, ptr: int, core_id: int) -> None:
+        super().__init__(ptr, 0x00008, core_id)
         self._bcg = Field(self, 28, 28)
 
     @property
@@ -343,8 +306,8 @@ class CoreMiscCfg(PerCoreRegister):
     _qrmaxcnt: Field[Self]
     _ovrtmuout: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00018, core_id)
+    def __init__(self: Self, ptr: int, core_id: int) -> None:
+        super().__init__(ptr, 0x00018, core_id)
         self._qrmaxcnt = Field(self, 3, 1)
         self._ovrtmuout = Field(self, 0, 0)
 
@@ -362,8 +325,8 @@ class CoreL2CACTL(PerCoreRegister):
     _l2cdis: Field[Self]
     _l2cena: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00020, core_id)
+    def __init__(self: Self, ptr: int, core_id: int) -> None:
+        super().__init__(ptr, 0x00020, core_id)
         self._l2cclr = Field(self, 2, 2)
         self._l2cdis = Field(self, 1, 1)
         self._l2cena = Field(self, 0, 0)
@@ -387,8 +350,8 @@ class CoreSLCACTL(PerCoreRegister):
     _ucc: Field[Self]
     _icc: Field[Self]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00024, core_id)
+    def __init__(self: Self, ptr: int, core_id: int) -> None:
+        super().__init__(ptr, 0x00024, core_id)
         self._tvccs = Field(self, 27, 24)
         self._tdccs = Field(self, 19, 16)
         self._ucc = Field(self, 11, 8)
@@ -414,8 +377,8 @@ class CoreSLCACTL(PerCoreRegister):
 class CorePctr0Src(PerCoreRegister):
     _s: list[Field[PerCoreRegister]]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int, n: int) -> None:
-        super().__init__(reg_rw, ptr, 0x00660 + n, core_id)
+    def __init__(self: Self, ptr: int, core_id: int, n: int) -> None:
+        super().__init__(ptr, 0x00660 + n, core_id)
         self._s = [
             Field(self, 7, 0),
             Field(self, 15, 8),
@@ -457,18 +420,18 @@ class Core:
     _pctr_0_src: list[CorePctr0Src]
     _pctr_0_pctr: list[PerCoreRegister]
 
-    def __init__(self: Self, reg_rw: _RegisterReaderWriter, ptr: int, core_id: int) -> None:
-        self._ident0 = CoreIdent0(reg_rw, ptr, core_id)
-        self._ident1 = CoreIdent1(reg_rw, ptr, core_id)
-        self._ident2 = CoreIdent2(reg_rw, ptr, core_id)
-        self._misccfg = CoreMiscCfg(reg_rw, ptr, core_id)
-        self._l2cactl = CoreL2CACTL(reg_rw, ptr, core_id)
-        self._slcactl = CoreSLCACTL(reg_rw, ptr, core_id)
-        self._pctr_0_en = PerCoreRegister(reg_rw, ptr, 0x00650, core_id)
-        self._pctr_0_clr = PerCoreRegister(reg_rw, ptr, 0x00654, core_id)
-        self._pctr_0_overflow = PerCoreRegister(reg_rw, ptr, 0x00658, core_id)
-        self._pctr_0_src = [CorePctr0Src(reg_rw, ptr, core_id, i) for i in range(0, 32, 4)]
-        self._pctr_0_pctr = [PerCoreRegister(reg_rw, ptr, 0x00680 + 4 * i, core_id) for i in range(32)]
+    def __init__(self: Self, ptr: int, core_id: int) -> None:
+        self._ident0 = CoreIdent0(ptr, core_id)
+        self._ident1 = CoreIdent1(ptr, core_id)
+        self._ident2 = CoreIdent2(ptr, core_id)
+        self._misccfg = CoreMiscCfg(ptr, core_id)
+        self._l2cactl = CoreL2CACTL(ptr, core_id)
+        self._slcactl = CoreSLCACTL(ptr, core_id)
+        self._pctr_0_en = PerCoreRegister(ptr, 0x00650, core_id)
+        self._pctr_0_clr = PerCoreRegister(ptr, 0x00654, core_id)
+        self._pctr_0_overflow = PerCoreRegister(ptr, 0x00658, core_id)
+        self._pctr_0_src = [CorePctr0Src(ptr, core_id, i) for i in range(0, 32, 4)]
+        self._pctr_0_pctr = [PerCoreRegister(ptr, 0x00680 + 4 * i, core_id) for i in range(32)]
 
     @property
     def IDENT0(self: Self) -> CoreIdent0:  # noqa: N802
@@ -582,7 +545,6 @@ class RegisterMapping:
 
         if "hub" not in reg_addrs:
             raise RuntimeError("Failed to get hub register addresses.")
-        reg_rw = _RegisterReaderWriter()
         map_hub = mmap.mmap(
             offset=reg_addrs["hub"][0],
             length=reg_addrs["hub"][1],
@@ -591,7 +553,7 @@ class RegisterMapping:
             prot=mmap.PROT_READ | mmap.PROT_WRITE,
         )
         ptr_hub = np.frombuffer(map_hub).ctypes.data
-        self._hub = Hub(reg_rw, ptr_hub)
+        self._hub = Hub(ptr_hub)
         self._map.append(map_hub)
 
         self._core = []
@@ -606,7 +568,7 @@ class RegisterMapping:
                 prot=mmap.PROT_READ | mmap.PROT_WRITE,
             )
             ptr_core = np.frombuffer(map_core).ctypes.data
-            self._core.append(Core(reg_rw, ptr_core, core))
+            self._core.append(Core(ptr_core, core))
             self._map.append(map_core)
 
         os.close(fd)

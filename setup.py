@@ -27,6 +27,6 @@ from setuptools import Extension, setup
 ext_modules = []
 
 if platform.machine() in ["armv7l", "aarch64"]:
-    ext_modules.append(Extension("_videocore7.readwrite4", sources=["src/_videocore7/readwrite4.c"]))
+    ext_modules.append(Extension("_videocore7.readwrite4", sources=["src/_videocore7/readwrite4/module.c"]))
 
 setup(ext_modules=ext_modules)
