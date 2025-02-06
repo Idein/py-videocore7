@@ -23,8 +23,12 @@ packages = [
   "videocore7.driver",
   "videocore7.v3d",
   "_videocore7",
+  "_videocore7.readwrite4",
 ]
 package-dir = {"" = "src"}
+ext-modules = [
+    {name = "_videocore7.readwrite4", sources = ["src/_videocore7/readwrite4/module.c"]}
+]
 
 [tool.ruff]
 lint.select = [
