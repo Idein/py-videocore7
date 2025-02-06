@@ -209,16 +209,6 @@ def boilerplate_binary_ops(
         else:
             raise ValueError("Invalid domain")
 
-        # if np.dtype(dst_dtype).name.startswith("float"):
-        #     x1[:] = np.random.uniform(-(2**7), 2**7, x1.shape).astype(src1_dtype)
-        #     x2[:] = np.random.uniform(-(2**7), 2**7, x2.shape).astype(src2_dtype)
-        # elif any(np.dtype(dst_dtype).name.startswith(t) for t in ["int", "uint"]):
-        #     info1 = np.iinfo(src1_dtype)
-        #     info2 = np.iinfo(src2_dtype)
-        #     x1[:] = np.random.randint(info1.min, info1.max - 1, x1.shape, dtype=src1_dtype)
-        #     x2[:] = np.random.randint(info2.min, info2.max - 1, x2.shape, dtype=src2_dtype)
-        # else:
-        #     assert False, "unreachable"
         y[:] = 0.0
 
         unif[0] = x1.addresses()[0]
