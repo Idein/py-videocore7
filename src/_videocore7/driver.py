@@ -54,26 +54,26 @@ class Array[T: np.generic](npt.NDArray[T]):
 
 
 class Memory:
-    drm: DRM_V3D
-    size: int
-    handle: int | None
-    phyaddr: int | None
-    buffer: mmap.mmap | None
+    _drm: DRM_V3D
+    _size: int
+    _handle: int | None
+    _phyaddr: int | None
+    _buffer: mmap.mmap | None
 
     def __init__(self: Self, drm: DRM_V3D, size: int) -> None:
-        self.drm = drm
-        self.size = size
-        self.handle = None  # Handle of BO for V3D DRM
-        self.phyaddr = None  # Physical address used in QPU
-        self.buffer = None  # mmap object of the memory area
+        self._drm = drm
+        self._size = size
+        self._handle = None  # Handle of BO for V3D DRM
+        self._phyaddr = None  # Physical address used in QPU
+        self._buffer = None  # mmap object of the memory area
 
         try:
-            self.handle, self.phyaddr = drm.v3d_create_bo(size)
-            offset = drm.v3d_mmap_bo(self.handle)
+            self._handle, self._phyaddr = drm.v3d_create_bo(size)
+            offset = drm.v3d_mmap_bo(self._handle)
             fd = drm.fd
             if fd is None:
                 raise DriverError("Failed to get file descriptor")
-            self.buffer = mmap.mmap(
+            self._buffer = mmap.mmap(
                 fileno=fd,
                 length=size,
                 flags=mmap.MAP_SHARED,
@@ -86,26 +86,38 @@ class Memory:
             raise e
 
     def close(self: Self) -> None:
-        if self.buffer is not None:
-            self.buffer.close()
+        if self._buffer is not None:
+            self._buffer.close()
 
-        if self.handle is not None:
-            self.drm.gem_close(self.handle)
+        if self._handle is not None:
+            self._drm.gem_close(self._handle)
 
-        self.handle = None
-        self.phyaddr = None
-        self.buffer = None
+        self._handle = None
+        self._phyaddr = None
+        self._buffer = None
+
+    @property
+    def handle(self: Self) -> int | None:
+        return self._handle
+
+    @property
+    def phyaddr(self: Self) -> int | None:
+        return self._phyaddr
+
+    @property
+    def buffer(self: Self) -> mmap.mmap | None:
+        return self._buffer
 
 
 class Dispatcher:
-    drm: DRM_V3D
-    bo_handles: npt.NDArray[np.uint32]
-    timeout_sec: int
+    _drm: DRM_V3D
+    _bo_handles: npt.NDArray[np.uint32]
+    _timeout_sec: int
 
     def __init__(self: Self, drm: DRM_V3D, bo_handles: npt.NDArray[np.uint32], timeout_sec: int = 10) -> None:
-        self.drm = drm
-        self.bo_handles = bo_handles
-        self.timeout_sec = timeout_sec
+        self._drm = drm
+        self._bo_handles = bo_handles
+        self._timeout_sec = timeout_sec
 
     def __enter__(self: Self) -> Self:
         return self
@@ -116,8 +128,8 @@ class Dispatcher:
         exc_value: BaseException | None,
         traceback: type[TracebackType] | None,
     ) -> None:
-        for bo_handle in self.bo_handles:
-            self.drm.v3d_wait_bo(bo_handle, timeout_ns=int(self.timeout_sec / 1e-9))
+        for bo_handle in self._bo_handles:
+            self._drm.v3d_wait_bo(bo_handle, timeout_ns=int(self._timeout_sec / 1e-9))
 
     def dispatch(
         self: Self,
@@ -133,7 +145,7 @@ class Dispatcher:
         def roundup(n: int, d: int) -> int:
             return (n + d - 1) // d
 
-        self.drm.v3d_submit_csd(
+        self._drm.v3d_submit_csd(
             cfg=(
                 # WGS X, Y, Z and settings
                 wg_x << 16,
@@ -149,23 +161,23 @@ class Dispatcher:
             ),
             # Not used in the driver.
             coef=(0, 0, 0, 0),
-            bo_handles=self.bo_handles.ctypes.data,
-            bo_handle_count=len(self.bo_handles),
+            bo_handles=self._bo_handles.ctypes.data,
+            bo_handle_count=len(self._bo_handles),
             in_sync=0,
             out_sync=0,
         )
 
 
 class Driver:
-    code_area_size: int
-    data_area_size: int
-    code_area_base: int
-    data_area_base: int
-    code_pos: int
-    data_pos: int
-    drm: DRM_V3D | None
-    memory: Memory | None
-    bo_handles: npt.NDArray[np.uint32] | None
+    _code_area_size: int
+    _data_area_size: int
+    _code_area_base: int
+    _data_area_base: int
+    _code_pos: int
+    _data_pos: int
+    _drm: DRM_V3D | None
+    _memory: Memory | None
+    _bo_handles: npt.NDArray[np.uint32] | None
 
     def __init__(
         self: Self,
@@ -173,39 +185,39 @@ class Driver:
         code_area_size: int = DEFAULT_CODE_AREA_SIZE,
         data_area_size: int = DEFAULT_DATA_AREA_SIZE,
     ):
-        self.code_area_size = code_area_size
-        self.data_area_size = data_area_size
-        total_size = self.code_area_size + self.data_area_size
-        self.code_area_base = 0
-        self.data_area_base = self.code_area_base + self.code_area_size
-        self.code_pos = self.code_area_base
-        self.data_pos = self.data_area_base
+        self._code_area_size = code_area_size
+        self._data_area_size = data_area_size
+        total_size = self._code_area_size + self._data_area_size
+        self._code_area_base = 0
+        self._data_area_base = self._code_area_base + self._code_area_size
+        self._code_pos = self._code_area_base
+        self._data_pos = self._data_area_base
 
-        self.drm = None
-        self.memory = None
-        self.bo_handles = None
+        self._drm = None
+        self._memory = None
+        self._bo_handles = None
 
         try:
-            self.drm = DRM_V3D()
+            self._drm = DRM_V3D()
 
-            self.memory = Memory(self.drm, total_size)
+            self._memory = Memory(self._drm, total_size)
 
-            self.bo_handles = np.array([self.memory.handle], dtype=np.uint32)
+            self._bo_handles = np.array([self._memory._handle], dtype=np.uint32)
 
         except Exception as e:
             self.close()
             raise e
 
     def close(self: Self) -> None:
-        if self.memory is not None:
-            self.memory.close()
+        if self._memory is not None:
+            self._memory.close()
 
-        if self.drm is not None:
-            self.drm.close()
+        if self._drm is not None:
+            self._drm.close()
 
-        self.drm = None
-        self.memory = None
-        self.bo_handles = None
+        self._drm = None
+        self._memory = None
+        self._bo_handles = None
 
     def __enter__(self: Self) -> Self:
         return self
@@ -220,22 +232,22 @@ class Driver:
         return exc_type is None
 
     def alloc[T: np.generic](self: Self, *args: Any, **kwargs: Any) -> Array[T]:
-        if self.memory is None:
+        if self._memory is None:
             raise DriverError("Driver is closed")
-        if self.memory.phyaddr is None:
+        if self._memory.phyaddr is None:
             raise DriverError("Memory is not initialized")
 
-        ofs = self.data_pos
+        ofs = self._data_pos
         arr = Array[T](
             *args,
-            phyaddr=self.memory.phyaddr + ofs,
-            buffer=self.memory.buffer,
+            phyaddr=self._memory.phyaddr + ofs,
+            buffer=self._memory.buffer,
             offset=ofs,
             **kwargs,
         )
 
-        self.data_pos += arr.nbytes
-        if self.data_pos > self.data_area_base + self.data_area_size:
+        self._data_pos += arr.nbytes
+        if self._data_pos > self._data_area_base + self._data_area_size:
             raise DriverError("Data too large")
 
         return arr
@@ -254,7 +266,10 @@ class Driver:
         self.dump_code(assemble(prog, *args, **kwargs), file=file)
 
     def program[**P, R](
-        self: Self, prog: Callable[Concatenate[Assembly, P], R] | list[int], *args: P.args, **kwargs: P.kwargs
+        self: Self,
+        prog: Callable[Concatenate[Assembly, P], R] | list[int],
+        *args: P.args,
+        **kwargs: P.kwargs,
     ) -> Array[np.uint64]:
         asm: list[int]
         if hasattr(prog, "__call__"):
@@ -264,22 +279,22 @@ class Driver:
         else:
             raise RuntimeError("unreachable")
 
-        if self.memory is None:
+        if self._memory is None:
             raise DriverError("Driver is closed")
-        if self.memory.phyaddr is None:
+        if self._memory.phyaddr is None:
             raise DriverError("Memory is not initialized")
 
-        offset = self.code_pos
+        offset = self._code_pos
         code = Array[np.uint64](
             shape=len(asm),
             dtype=np.uint64,
-            phyaddr=self.memory.phyaddr + offset,
-            buffer=self.memory.buffer,
+            phyaddr=self._memory.phyaddr + offset,
+            buffer=self._memory.buffer,
             offset=offset,
         )
 
-        self.code_pos += code.nbytes
-        if self.code_pos > self.code_area_base + self.code_area_size:
+        self._code_pos += code.nbytes
+        if self._code_pos > self._code_area_base + self._code_area_size:
             raise DriverError("Code too large")
 
         code[:] = asm
@@ -287,11 +302,11 @@ class Driver:
         return code
 
     def compute_shader_dispatcher(self: Self, timeout_sec: int = 10) -> Dispatcher:
-        if self.drm is None:
+        if self._drm is None:
             raise DriverError("Driver is closed")
-        if self.bo_handles is None:
+        if self._bo_handles is None:
             raise DriverError("BO handles are not initialized")
-        return Dispatcher(self.drm, self.bo_handles, timeout_sec=timeout_sec)
+        return Dispatcher(self._drm, self._bo_handles, timeout_sec=timeout_sec)
 
     def execute(
         self: Self,
@@ -304,3 +319,7 @@ class Driver:
     ) -> None:
         with self.compute_shader_dispatcher(timeout_sec) as csd:
             csd.dispatch(code, uniforms=uniforms, workgroup=workgroup, wgs_per_sg=wgs_per_sg, thread=thread)
+
+    @property
+    def code_pos(self: Self) -> int:
+        return self._code_pos

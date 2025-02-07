@@ -43,15 +43,19 @@ type c_uint32x4 = tuple[
 
 
 class DRM_V3D:  # noqa: N801
-    fd: int | None
+    _fd: int | None
+
+    @property
+    def fd(self: Self) -> int | None:
+        return self._fd
 
     def __init__(self: Self, path: str = "/dev/dri/card0") -> None:
-        self.fd = os.open(path, os.O_RDWR)
+        self._fd = os.open(path, os.O_RDWR)
 
     def close(self: Self) -> None:
-        if self.fd is not None:
-            os.close(self.fd)
-        self.fd = None
+        if self._fd is not None:
+            os.close(self._fd)
+        self._fd = None
 
     def __enter__(self: Self) -> Self:
         return self
@@ -192,7 +196,7 @@ class DRM_V3D:  # noqa: N801
     IOCTL_V3D_SUBMIT_CSD = IOW(DRM_IOCTL_BASE, DRM_V3D_SUBMIT_CSD, _st_v3d_submit_csd)
 
     def gem_close(self: Self, handle: int) -> None:
-        if self.fd is None:
+        if self._fd is None:
             raise ValueError("already closed")
         if handle < 0 or 0xFFFFFFFF < handle:
             raise ValueError("handle is out of range")
@@ -200,10 +204,10 @@ class DRM_V3D:  # noqa: N801
             handle=handle,
             pad=0,
         )
-        ioctl(self.fd, self.IOCTL_GEM_CLOSE, st)
+        ioctl(self._fd, self.IOCTL_GEM_CLOSE, st)
 
     def v3d_wait_bo(self: Self, handle: int, timeout_ns: int) -> None:
-        if self.fd is None:
+        if self._fd is None:
             raise ValueError("already closed")
         if handle < 0 or 0xFFFFFFFF < handle:
             raise ValueError("handle is out of range")
@@ -214,10 +218,10 @@ class DRM_V3D:  # noqa: N801
             pad=0,
             timeout_ns=timeout_ns,
         )
-        ioctl(self.fd, self.IOCTL_V3D_WAIT_BO, st)
+        ioctl(self._fd, self.IOCTL_V3D_WAIT_BO, st)
 
     def v3d_create_bo(self: Self, size: int, flags: int = 0) -> tuple[int, int]:
-        if self.fd is None:
+        if self._fd is None:
             raise ValueError("already closed")
         if size < 0 or 0xFFFFFFFF < size:
             raise ValueError("size is out of range")
@@ -229,11 +233,11 @@ class DRM_V3D:  # noqa: N801
             handle=0,
             offset=0,
         )
-        ioctl(self.fd, self.IOCTL_V3D_CREATE_BO, st)
+        ioctl(self._fd, self.IOCTL_V3D_CREATE_BO, st)
         return int(st.handle), int(st.offset)
 
     def v3d_mmap_bo(self: Self, handle: int, flags: int = 0) -> int:
-        if self.fd is None:
+        if self._fd is None:
             raise ValueError("already closed")
         if handle < 0 or 0xFFFFFFFF < handle:
             raise ValueError("handle is out of range")
@@ -244,11 +248,11 @@ class DRM_V3D:  # noqa: N801
             flags=flags,
             offset=0,
         )
-        ioctl(self.fd, self.IOCTL_V3D_MMAP_BO, st)
+        ioctl(self._fd, self.IOCTL_V3D_MMAP_BO, st)
         return int(st.offset)
 
     def v3d_get_param(self: Self, param: int) -> int:
-        if self.fd is None:
+        if self._fd is None:
             raise ValueError("already closed")
         if param < 0 or 0xFFFFFFFF < param:
             raise ValueError("param is out of range")
@@ -257,7 +261,7 @@ class DRM_V3D:  # noqa: N801
             pad=0,
             value=0,
         )
-        ioctl(self.fd, self.IOCTL_V3D_GET_PARAM, st)
+        ioctl(self._fd, self.IOCTL_V3D_GET_PARAM, st)
         return int(st.value)
 
     def v3d_submit_csd(
@@ -269,7 +273,7 @@ class DRM_V3D:  # noqa: N801
         in_sync: int,
         out_sync: int,
     ) -> None:
-        if self.fd is None:
+        if self._fd is None:
             raise ValueError("already closed")
         if len(cfg) != 7:
             raise ValueError("cfg has invalid length")
@@ -298,4 +302,4 @@ class DRM_V3D:  # noqa: N801
             in_sync=in_sync,
             out_sync=out_sync,
         )
-        ioctl(self.fd, self.IOCTL_V3D_SUBMIT_CSD, st)
+        ioctl(self._fd, self.IOCTL_V3D_SUBMIT_CSD, st)
