@@ -26,14 +26,14 @@ import numpy as np
 from _videocore7.readwrite4 import read4, write4
 
 
-class Register(Protocol):
+class SupportsValue(Protocol):
     @property
     def value(self: Self) -> int: ...
     @value.setter
     def value(self: Self, value: int) -> None: ...
 
 
-class HubRegister:
+class Register:
     _ptr: int
     _offset: int
 
@@ -50,36 +50,15 @@ class HubRegister:
         write4(c_void_p(self._ptr + self._offset), c_uint32(value))
 
     def _proof_compliant(self: Self) -> None:
-        _proof_register: Register = self
+        _proof_register: SupportsValue = self
 
 
-class PerCoreRegister:
-    _ptr: int
-    _offset: int
-    _core_id: int
-
-    def __init__(self: Self, ptr: int, offset: int, core_id: int) -> None:
-        self._ptr = ptr
-        self._offset = offset
-
-    @property
-    def value(self: Self) -> int:
-        return int(read4(c_void_p(self._ptr + self._offset)))
-
-    @value.setter
-    def value(self: Self, value: int) -> None:
-        write4(c_void_p(self._ptr + self._offset), c_uint32(value))
-
-    def _proof_compliant(self: Self) -> None:
-        _proof_register: Register = self
-
-
-class Field[R: Register]:
-    _reg: R
+class Field:
+    _reg: Register
     _mask: int
     _shift: int
 
-    def __init__(self: Self, reg: R, high: int, low: int) -> None:
+    def __init__(self: Self, reg: Register, high: int, low: int) -> None:
         self._reg = reg
         self._mask = ((1 << (high - low + 1)) - 1) << low
         self._shift = low
@@ -93,21 +72,21 @@ class Field[R: Register]:
         self._reg.value = (self._reg.value & ~self._mask) | ((int(value) << self._shift) & self._mask)
 
     def _proof_compliant(self: Self) -> None:
-        _proof_register: Register = self
+        _proof_register: SupportsValue = self
 
 
 # V3D register definitions derived from linux/drivers/gpu/drm/v3d/v3d_regs.h
 
 
-class HubIdent1(HubRegister):
-    _with_mso: Field[Self]
-    _with_tsy: Field[Self]
-    _with_tfu: Field[Self]
-    _with_l3c: Field[Self]
-    _nhosts: Field[Self]
-    _ncores: Field[Self]
-    _rev: Field[Self]
-    _tver: Field[Self]
+class HubIdent1(Register):
+    _with_mso: Field
+    _with_tsy: Field
+    _with_tfu: Field
+    _with_l3c: Field
+    _nhosts: Field
+    _ncores: Field
+    _rev: Field
+    _tver: Field
 
     def __init__(self: Self, ptr: int) -> None:
         super().__init__(ptr, 0x0000C)
@@ -121,41 +100,41 @@ class HubIdent1(HubRegister):
         self._tver = Field(self, 3, 0)
 
     @property
-    def WITH_MSO(self: Self) -> Field[Self]:  # noqa: N802
+    def WITH_MSO(self: Self) -> Field:  # noqa: N802
         return self._with_mso
 
     @property
-    def WITH_TSY(self: Self) -> Field[Self]:  # noqa: N802
+    def WITH_TSY(self: Self) -> Field:  # noqa: N802
         return self._with_tsy
 
     @property
-    def WITH_TFU(self: Self) -> Field[Self]:  # noqa: N802
+    def WITH_TFU(self: Self) -> Field:  # noqa: N802
         return self._with_tfu
 
     @property
-    def WITH_L3C(self: Self) -> Field[Self]:  # noqa: N802
+    def WITH_L3C(self: Self) -> Field:  # noqa: N802
         return self._with_l3c
 
     @property
-    def NHOSTS(self: Self) -> Field[Self]:  # noqa: N802
+    def NHOSTS(self: Self) -> Field:  # noqa: N802
         return self._nhosts
 
     @property
-    def NCORES(self: Self) -> Field[Self]:  # noqa: N802
+    def NCORES(self: Self) -> Field:  # noqa: N802
         return self._ncores
 
     @property
-    def REV(self: Self) -> Field[Self]:  # noqa: N802
+    def REV(self: Self) -> Field:  # noqa: N802
         return self._rev
 
     @property
-    def TVER(self: Self) -> Field[Self]:  # noqa: N802
+    def TVER(self: Self) -> Field:  # noqa: N802
         return self._tver
 
 
-class HubIdent2(HubRegister):
-    _mmu: Field[Self]
-    _l3c_nkb: Field[Self]
+class HubIdent2(Register):
+    _mmu: Field
+    _l3c_nkb: Field
 
     def __init__(self: Self, ptr: int) -> None:
         super().__init__(ptr, 0x00010)
@@ -163,17 +142,17 @@ class HubIdent2(HubRegister):
         self._l3c_nkb = Field(self, 7, 0)
 
     @property
-    def WITH_MMU(self: Self) -> Field[Self]:  # noqa: N802
+    def WITH_MMU(self: Self) -> Field:  # noqa: N802
         return self._mmu
 
     @property
-    def L3C_NKB(self: Self) -> Field[Self]:  # noqa: N802
+    def L3C_NKB(self: Self) -> Field:  # noqa: N802
         return self._l3c_nkb
 
 
-class HubIdent3(HubRegister):
-    _iprev: Field[Self]
-    _ipidx: Field[Self]
+class HubIdent3(Register):
+    _iprev: Field
+    _ipidx: Field
 
     def __init__(self: Self, ptr: int) -> None:
         super().__init__(ptr, 0x00014)
@@ -181,42 +160,42 @@ class HubIdent3(HubRegister):
         self._ipidx = Field(self, 7, 0)
 
     @property
-    def IPREV(self: Self) -> Field[Self]:  # noqa: N802
+    def IPREV(self: Self) -> Field:  # noqa: N802
         return self._iprev
 
     @property
-    def IPIDX(self: Self) -> Field[Self]:  # noqa: N802
+    def IPIDX(self: Self) -> Field:  # noqa: N802
         return self._ipidx
 
 
 class Hub:
-    _axicfg: HubRegister
-    _uifcfg: HubRegister
-    _ident0: HubRegister
+    _axicfg: Register
+    _uifcfg: Register
+    _ident0: Register
     _ident1: HubIdent1
     _ident2: HubIdent2
     _ident3: HubIdent3
-    _tfu_cs: HubRegister
+    _tfu_cs: Register
 
     def __init__(self: Self, ptr: int) -> None:
-        self._axicfg = HubRegister(ptr, 0x00000)
-        self._uifcfg = HubRegister(ptr, 0x00004)
-        self._ident0 = HubRegister(ptr, 0x00008)
+        self._axicfg = Register(ptr, 0x00000)
+        self._uifcfg = Register(ptr, 0x00004)
+        self._ident0 = Register(ptr, 0x00008)
         self._ident1 = HubIdent1(ptr)
         self._ident2 = HubIdent2(ptr)
         self._ident3 = HubIdent3(ptr)
-        self._tfu_cs = HubRegister(ptr, 0x00700)
+        self._tfu_cs = Register(ptr, 0x00700)
 
     @property
-    def AXICFG(self: Self) -> HubRegister:  # noqa: N802
+    def AXICFG(self: Self) -> Register:  # noqa: N802
         return self._axicfg
 
     @property
-    def UIFCFG(self: Self) -> HubRegister:  # noqa: N802
+    def UIFCFG(self: Self) -> Register:  # noqa: N802
         return self._uifcfg
 
     @property
-    def IDENT0(self: Self) -> HubRegister:  # noqa: N802
+    def IDENT0(self: Self) -> Register:  # noqa: N802
         return self._ident0
 
     @property
@@ -232,32 +211,32 @@ class Hub:
         return self._ident3
 
     @property
-    def TFU_CS(self: Self) -> HubRegister:  # noqa: N802
+    def TFU_CS(self: Self) -> Register:  # noqa: N802
         return self._tfu_cs
 
 
-class CoreIdent0(PerCoreRegister):
-    _ver: Field[Self]
+class CoreIdent0(Register):
+    _ver: Field
 
-    def __init__(self: Self, ptr: int, core_id: int) -> None:
-        super().__init__(ptr, 0x00000, core_id)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00000)
         self._ver = Field(self, 31, 24)
 
     @property
-    def VER(self: Self) -> Field[Self]:  # noqa: N802
+    def VER(self: Self) -> Field:  # noqa: N802
         return self._ver
 
 
-class CoreIdent1(PerCoreRegister):
-    _vpm_size: Field[Self]
-    _nsem: Field[Self]
-    _ntmu: Field[Self]
-    _qups: Field[Self]
-    _nslc: Field[Self]
-    _rev: Field[Self]
+class CoreIdent1(Register):
+    _vpm_size: Field
+    _nsem: Field
+    _ntmu: Field
+    _qups: Field
+    _nslc: Field
+    _rev: Field
 
-    def __init__(self: Self, ptr: int, core_id: int) -> None:
-        super().__init__(ptr, 0x00004, core_id)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00004)
         self._vpm_size = Field(self, 31, 28)
         self._nsem = Field(self, 23, 16)
         self._ntmu = Field(self, 15, 12)
@@ -266,119 +245,119 @@ class CoreIdent1(PerCoreRegister):
         self._rev = Field(self, 3, 0)
 
     @property
-    def VPM_SIZE(self: Self) -> Field[Self]:  # noqa: N802
+    def VPM_SIZE(self: Self) -> Field:  # noqa: N802
         return self._vpm_size
 
     @property
-    def NSEM(self: Self) -> Field[Self]:  # noqa: N802
+    def NSEM(self: Self) -> Field:  # noqa: N802
         return self._nsem
 
     @property
-    def NTMU(self: Self) -> Field[Self]:  # noqa: N802
+    def NTMU(self: Self) -> Field:  # noqa: N802
         return self._ntmu
 
     @property
-    def QUPS(self: Self) -> Field[Self]:  # noqa: N802
+    def QUPS(self: Self) -> Field:  # noqa: N802
         return self._qups
 
     @property
-    def NSLC(self: Self) -> Field[Self]:  # noqa: N802
+    def NSLC(self: Self) -> Field:  # noqa: N802
         return self._nslc
 
     @property
-    def REV(self: Self) -> Field[Self]:  # noqa: N802
+    def REV(self: Self) -> Field:  # noqa: N802
         return self._rev
 
 
-class CoreIdent2(PerCoreRegister):
-    _bcg: Field[Self]
+class CoreIdent2(Register):
+    _bcg: Field
 
-    def __init__(self: Self, ptr: int, core_id: int) -> None:
-        super().__init__(ptr, 0x00008, core_id)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00008)
         self._bcg = Field(self, 28, 28)
 
     @property
-    def BCG(self: Self) -> Field[Self]:  # noqa: N802
+    def BCG(self: Self) -> Field:  # noqa: N802
         return self._bcg
 
 
-class CoreMiscCfg(PerCoreRegister):
-    _qrmaxcnt: Field[Self]
-    _ovrtmuout: Field[Self]
+class CoreMiscCfg(Register):
+    _qrmaxcnt: Field
+    _ovrtmuout: Field
 
-    def __init__(self: Self, ptr: int, core_id: int) -> None:
-        super().__init__(ptr, 0x00018, core_id)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00018)
         self._qrmaxcnt = Field(self, 3, 1)
         self._ovrtmuout = Field(self, 0, 0)
 
     @property
-    def QRMAXCNT(self: Self) -> Field[Self]:  # noqa: N802
+    def QRMAXCNT(self: Self) -> Field:  # noqa: N802
         return self._qrmaxcnt
 
     @property
-    def OVRTMUOUT(self: Self) -> Field[Self]:  # noqa: N802
+    def OVRTMUOUT(self: Self) -> Field:  # noqa: N802
         return self._ovrtmuout
 
 
-class CoreL2CACTL(PerCoreRegister):
-    _l2cclr: Field[Self]
-    _l2cdis: Field[Self]
-    _l2cena: Field[Self]
+class CoreL2CACTL(Register):
+    _l2cclr: Field
+    _l2cdis: Field
+    _l2cena: Field
 
-    def __init__(self: Self, ptr: int, core_id: int) -> None:
-        super().__init__(ptr, 0x00020, core_id)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00020)
         self._l2cclr = Field(self, 2, 2)
         self._l2cdis = Field(self, 1, 1)
         self._l2cena = Field(self, 0, 0)
 
     @property
-    def L2CCLR(self: Self) -> Field[Self]:  # noqa: N802
+    def L2CCLR(self: Self) -> Field:  # noqa: N802
         return self._l2cclr
 
     @property
-    def L2CDIS(self: Self) -> Field[Self]:  # noqa: N802
+    def L2CDIS(self: Self) -> Field:  # noqa: N802
         return self._l2cdis
 
     @property
-    def L2CENA(self: Self) -> Field[Self]:  # noqa: N802
+    def L2CENA(self: Self) -> Field:  # noqa: N802
         return self._l2cena
 
 
-class CoreSLCACTL(PerCoreRegister):
-    _tvccs: Field[Self]
-    _tdccs: Field[Self]
-    _ucc: Field[Self]
-    _icc: Field[Self]
+class CoreSLCACTL(Register):
+    _tvccs: Field
+    _tdccs: Field
+    _ucc: Field
+    _icc: Field
 
-    def __init__(self: Self, ptr: int, core_id: int) -> None:
-        super().__init__(ptr, 0x00024, core_id)
+    def __init__(self: Self, ptr: int) -> None:
+        super().__init__(ptr, 0x00024)
         self._tvccs = Field(self, 27, 24)
         self._tdccs = Field(self, 19, 16)
         self._ucc = Field(self, 11, 8)
         self._icc = Field(self, 3, 0)
 
     @property
-    def TVCCS(self: Self) -> Field[Self]:  # noqa: N802
+    def TVCCS(self: Self) -> Field:  # noqa: N802
         return self._tvccs
 
     @property
-    def TDCCS(self: Self) -> Field[Self]:  # noqa: N802
+    def TDCCS(self: Self) -> Field:  # noqa: N802
         return self._tdccs
 
     @property
-    def UCC(self: Self) -> Field[Self]:  # noqa: N802
+    def UCC(self: Self) -> Field:  # noqa: N802
         return self._ucc
 
     @property
-    def ICC(self: Self) -> Field[Self]:  # noqa: N802
+    def ICC(self: Self) -> Field:  # noqa: N802
         return self._icc
 
 
-class CorePctr0Src(PerCoreRegister):
-    _s: list[Field[PerCoreRegister]]
+class CorePctr0Src(Register):
+    _s: list[Field]
 
-    def __init__(self: Self, ptr: int, core_id: int, n: int) -> None:
-        super().__init__(ptr, 0x00660 + n, core_id)
+    def __init__(self: Self, ptr: int, n: int) -> None:
+        super().__init__(ptr, 0x00660 + n)
         self._s = [
             Field(self, 7, 0),
             Field(self, 15, 8),
@@ -387,23 +366,23 @@ class CorePctr0Src(PerCoreRegister):
         ]
 
     @property
-    def S(self: Self) -> list[Field[PerCoreRegister]]:  # noqa: N802
+    def S(self: Self) -> list[Field]:  # noqa: N802
         return self._s
 
     @property
-    def S0(self: Self) -> Field[PerCoreRegister]:  # noqa: N802
+    def S0(self: Self) -> Field:  # noqa: N802
         return self._s[0]
 
     @property
-    def S1(self: Self) -> Field[PerCoreRegister]:  # noqa: N802
+    def S1(self: Self) -> Field:  # noqa: N802
         return self._s[1]
 
     @property
-    def S2(self: Self) -> Field[PerCoreRegister]:  # noqa: N802
+    def S2(self: Self) -> Field:  # noqa: N802
         return self._s[2]
 
     @property
-    def S3(self: Self) -> Field[PerCoreRegister]:  # noqa: N802
+    def S3(self: Self) -> Field:  # noqa: N802
         return self._s[3]
 
 
@@ -414,24 +393,24 @@ class Core:
     _misccfg: CoreMiscCfg
     _l2cactl: CoreL2CACTL
     _slcactl: CoreSLCACTL
-    _pctr_0_en: PerCoreRegister
-    _pctr_0_clr: PerCoreRegister
-    _pctr_0_overflow: PerCoreRegister
+    _pctr_0_en: Register
+    _pctr_0_clr: Register
+    _pctr_0_overflow: Register
     _pctr_0_src: list[CorePctr0Src]
-    _pctr_0_pctr: list[PerCoreRegister]
+    _pctr_0_pctr: list[Register]
 
     def __init__(self: Self, ptr: int, core_id: int) -> None:
-        self._ident0 = CoreIdent0(ptr, core_id)
-        self._ident1 = CoreIdent1(ptr, core_id)
-        self._ident2 = CoreIdent2(ptr, core_id)
-        self._misccfg = CoreMiscCfg(ptr, core_id)
-        self._l2cactl = CoreL2CACTL(ptr, core_id)
-        self._slcactl = CoreSLCACTL(ptr, core_id)
-        self._pctr_0_en = PerCoreRegister(ptr, 0x00650, core_id)
-        self._pctr_0_clr = PerCoreRegister(ptr, 0x00654, core_id)
-        self._pctr_0_overflow = PerCoreRegister(ptr, 0x00658, core_id)
-        self._pctr_0_src = [CorePctr0Src(ptr, core_id, i) for i in range(0, 32, 4)]
-        self._pctr_0_pctr = [PerCoreRegister(ptr, 0x00680 + 4 * i, core_id) for i in range(32)]
+        self._ident0 = CoreIdent0(ptr)
+        self._ident1 = CoreIdent1(ptr)
+        self._ident2 = CoreIdent2(ptr)
+        self._misccfg = CoreMiscCfg(ptr)
+        self._l2cactl = CoreL2CACTL(ptr)
+        self._slcactl = CoreSLCACTL(ptr)
+        self._pctr_0_en = Register(ptr, 0x00650)
+        self._pctr_0_clr = Register(ptr, 0x00654)
+        self._pctr_0_overflow = Register(ptr, 0x00658)
+        self._pctr_0_src = [CorePctr0Src(ptr, i) for i in range(0, 32, 4)]
+        self._pctr_0_pctr = [Register(ptr, 0x00680 + 4 * i) for i in range(32)]
 
     @property
     def IDENT0(self: Self) -> CoreIdent0:  # noqa: N802
@@ -458,15 +437,15 @@ class Core:
         return self._slcactl
 
     @property
-    def PCTR_0_EN(self: Self) -> PerCoreRegister:  # noqa: N802
+    def PCTR_0_EN(self: Self) -> Register:  # noqa: N802
         return self._pctr_0_en
 
     @property
-    def PCTR_0_CLR(self: Self) -> PerCoreRegister:  # noqa: N802
+    def PCTR_0_CLR(self: Self) -> Register:  # noqa: N802
         return self._pctr_0_clr
 
     @property
-    def PCTR_0_OVERFLOW(self: Self) -> PerCoreRegister:  # noqa: N802
+    def PCTR_0_OVERFLOW(self: Self) -> Register:  # noqa: N802
         return self._pctr_0_overflow
 
     @property
@@ -510,7 +489,7 @@ class Core:
     @property
     def PCTR_0_PCTR(  # noqa: N802
         self: Self,
-    ) -> list[PerCoreRegister]:
+    ) -> list[Register]:
         return self._pctr_0_pctr
 
 
