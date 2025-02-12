@@ -191,13 +191,13 @@ class DRM_V3D:  # noqa: N801
         def out_sync(self: Self, value: c_uint32) -> None:
             self.out_sync = value
 
-    IOCTL_GEM_CLOSE = IOW(DRM_IOCTL_BASE, DRM_GEM_CLOSE, _st_gem_close)
+    IOCTL_GEM_CLOSE: Final[int] = IOW(DRM_IOCTL_BASE, DRM_GEM_CLOSE, _st_gem_close)
 
-    IOCTL_V3D_WAIT_BO = IOWR(DRM_IOCTL_BASE, DRM_V3D_WAIT_BO, _st_v3d_wait_bo)
-    IOCTL_V3D_CREATE_BO = IOWR(DRM_IOCTL_BASE, DRM_V3D_CREATE_BO, _st_v3d_create_bo)
-    IOCTL_V3D_MMAP_BO = IOWR(DRM_IOCTL_BASE, DRM_V3D_MMAP_BO, _st_v3d_mmap_bo)
-    IOCTL_V3D_GET_PARAM = IOWR(DRM_IOCTL_BASE, DRM_V3D_GET_PARAM, _st_v3d_get_param)
-    IOCTL_V3D_SUBMIT_CSD = IOW(DRM_IOCTL_BASE, DRM_V3D_SUBMIT_CSD, _st_v3d_submit_csd)
+    IOCTL_V3D_WAIT_BO: Final[int] = IOWR(DRM_IOCTL_BASE, DRM_V3D_WAIT_BO, _st_v3d_wait_bo)
+    IOCTL_V3D_CREATE_BO: Final[int] = IOWR(DRM_IOCTL_BASE, DRM_V3D_CREATE_BO, _st_v3d_create_bo)
+    IOCTL_V3D_MMAP_BO: Final[int] = IOWR(DRM_IOCTL_BASE, DRM_V3D_MMAP_BO, _st_v3d_mmap_bo)
+    IOCTL_V3D_GET_PARAM: Final[int] = IOWR(DRM_IOCTL_BASE, DRM_V3D_GET_PARAM, _st_v3d_get_param)
+    IOCTL_V3D_SUBMIT_CSD: Final[int] = IOW(DRM_IOCTL_BASE, DRM_V3D_SUBMIT_CSD, _st_v3d_submit_csd)
 
     def gem_close(self: Self, handle: int) -> None:
         if self._fd is None:
