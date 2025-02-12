@@ -134,6 +134,10 @@ class DRM_V3D:  # noqa: N801
             ("bo_handle_count", c_uint32),
             ("in_sync", c_uint32),
             ("out_sync", c_uint32),
+            ("perfmon_id", c_uint32),
+            ("extensions", c_uint64),
+            ("flags", c_uint32),
+            ("pad", c_uint32),
         ]
 
         # NOTE: Since mypy treats the types of fields in _fields_ as Any,
@@ -301,5 +305,9 @@ class DRM_V3D:  # noqa: N801
             bo_handle_count=bo_handle_count,
             in_sync=in_sync,
             out_sync=out_sync,
+            perfmon_id=0,
+            extensions=0,
+            flags=0,
+            pad=0,
         )
         ioctl(self._fd, self.IOCTL_V3D_SUBMIT_CSD, st)
