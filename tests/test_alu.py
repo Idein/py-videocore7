@@ -76,6 +76,7 @@ ops: dict[str | None, Callable[..., Any]] = {
     "shuffle": lambda a, b: a[b % 16],
     # unary ops
     "fmov": lambda x: x,
+    "mov": lambda x: x,
     "fround": np.round,
     "ftrunc": np.trunc,
     "ffloor": np.floor,
@@ -116,6 +117,7 @@ ops: dict[str | None, Callable[..., Any]] = {
 @qpu
 def qpu_binary_ops(
     asm: Assembly,
+    explicit_dual_issue: bool,
     bin_ops: list[str],
     dst_ops: list[str | None],
     src1_ops: list[str | None],
@@ -141,7 +143,11 @@ def qpu_binary_ops(
 
     g = globals()
     for op, pack, unpack1, unpack2 in itertools.product(bin_ops, dst_ops, src1_ops, src2_ops):
-        g[op](
+        if explicit_dual_issue:
+            f = nop().__getattribute__(op)
+        else:
+            f = g[op]
+        f(
             rf10.pack(pack) if pack is not None else rf10,
             rf11.unpack(unpack1) if unpack1 is not None else rf11,
             rf12.unpack(unpack2) if unpack2 is not None else rf12,
@@ -161,6 +167,7 @@ def qpu_binary_ops(
 
 
 def boilerplate_binary_ops(
+    explicit_dual_issue: bool,
     bin_ops: list[str],
     dst: tuple[type, list[str | None]],
     src1: tuple[type, list[str | None]],
@@ -175,7 +182,7 @@ def boilerplate_binary_ops(
     with Driver() as drv:
         cases = list(itertools.product(bin_ops, dst_ops, src1_ops, src2_ops))
 
-        code = drv.program(qpu_binary_ops, bin_ops, dst_ops, src1_ops, src2_ops)
+        code = drv.program(qpu_binary_ops, explicit_dual_issue, bin_ops, dst_ops, src1_ops, src2_ops)
         x1: Array[Any] = drv.alloc((16 * 4 // np.dtype(src1_dtype).itemsize,), dtype=src1_dtype)
         x2: Array[Any] = drv.alloc((16 * 4 // np.dtype(src2_dtype).itemsize,), dtype=src2_dtype)
         y: Array[Any] = drv.alloc((len(cases), 16 * 4 // np.dtype(dst_dtype).itemsize), dtype=dst_dtype)
@@ -236,6 +243,7 @@ def test_binary_ops() -> None:
     ]
     for dst, src1, src2 in itertools.product(packs, unpacks, unpacks):
         boilerplate_binary_ops(
+            False,
             ["fadd", "faddnf", "fsub", "fmin", "fmax"],
             dst,
             src1,
@@ -251,7 +259,15 @@ def test_binary_ops() -> None:
     ]
     for dst, src1, src2 in itertools.product(packs, unpacks, unpacks):
         boilerplate_binary_ops(
+            False,
             ["fmul", "fcmp"],
+            dst,
+            src1,
+            src2,
+        )
+        boilerplate_binary_ops(
+            True,
+            ["fmul"],
             dst,
             src1,
             src2,
@@ -265,6 +281,7 @@ def test_binary_ops() -> None:
     ]
     for dst, src1, src2 in itertools.product(packs, unpacks, unpacks):
         boilerplate_binary_ops(
+            False,
             ["vfpack"],
             dst,
             src1,
@@ -279,37 +296,64 @@ def test_binary_ops() -> None:
     ]
     for dst, src1, src2 in itertools.product(packs, unpacks, packs):
         boilerplate_binary_ops(
+            False,
             ["vfmin", "vfmax", "vfmul"],
+            dst,
+            src1,
+            src2,
+        )
+        boilerplate_binary_ops(
+            True,
+            ["vfmul"],
             dst,
             src1,
             src2,
         )
 
     boilerplate_binary_ops(
+        False,
         ["add", "sub", "imin", "imax", "asr"],
         (np.int32, [None, "none"]),
         (np.int32, [None, "none"]),
         (np.int32, [None, "none"]),
     )
     boilerplate_binary_ops(
+        True,
+        ["add", "sub"],
+        (np.int32, [None, "none"]),
+        (np.int32, [None, "none"]),
+        (np.int32, [None, "none"]),
+    )
+    boilerplate_binary_ops(
+        False,
         ["add", "sub", "umin", "umax"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
     )
     boilerplate_binary_ops(
+        True,
+        ["add", "sub"],
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+        (np.uint32, [None, "none"]),
+    )
+    boilerplate_binary_ops(
+        False,
         ["vadd", "vsub"],
         (np.int16, [None, "none"]),
         (np.int16, [None, "none"]),
         (np.int16, [None, "none"]),
     )
     boilerplate_binary_ops(
+        False,
         ["shl", "shr", "ror"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
     )
     boilerplate_binary_ops(
+        False,
         ["band", "bor", "bxor"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
@@ -317,6 +361,7 @@ def test_binary_ops() -> None:
     )
 
     boilerplate_binary_ops(
+        False,
         ["quad_rotate", "rotate", "shuffle"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
@@ -327,7 +372,13 @@ def test_binary_ops() -> None:
 
 
 @qpu
-def qpu_unary_ops(asm: Assembly, bin_ops: list[str], dst_ops: list[str | None], src_ops: list[str | None]) -> None:
+def qpu_unary_ops(
+    asm: Assembly,
+    explicit_dual_issue: bool,
+    bin_ops: list[str],
+    dst_ops: list[str | None],
+    src_ops: list[str | None],
+) -> None:
     eidx(rf10, sig=ldunifrf(rf0))
     nop(sig=ldunifrf(rf1))
     mov(rf13, 4)
@@ -344,7 +395,11 @@ def qpu_unary_ops(asm: Assembly, bin_ops: list[str], dst_ops: list[str | None], 
 
     g = globals()
     for op, pack, unpack in itertools.product(bin_ops, dst_ops, src_ops):
-        g[op](
+        if explicit_dual_issue:
+            f = nop().__getattribute__(op)
+        else:
+            f = g[op]
+        f(
             rf10.pack(pack) if pack is not None else rf10,
             rf11.unpack(unpack) if unpack is not None else rf11,
         )
@@ -363,6 +418,7 @@ def qpu_unary_ops(asm: Assembly, bin_ops: list[str], dst_ops: list[str | None], 
 
 
 def boilerplate_unary_ops(
+    explicit_dual_issue: bool,
     uni_ops: list[str],
     dst: tuple[type, list[str | None]],
     src: tuple[type, list[str | None]],
@@ -375,7 +431,7 @@ def boilerplate_unary_ops(
     with Driver() as drv:
         cases = list(itertools.product(uni_ops, dst_ops, src_ops))
 
-        code = drv.program(qpu_unary_ops, uni_ops, dst_ops, src_ops)
+        code = drv.program(qpu_unary_ops, explicit_dual_issue, uni_ops, dst_ops, src_ops)
         x: Array[Any] = drv.alloc((16 * 4 // np.dtype(src_dtype).itemsize,), dtype=src_dtype)
         y: Array[Any] = drv.alloc((len(cases), 16 * 4 // np.dtype(dst_dtype).itemsize), dtype=dst_dtype)
         unif: Array[np.uint32] = drv.alloc(3, dtype=np.uint32)
@@ -405,6 +461,12 @@ def boilerplate_unary_ops(
 
 
 def test_unary_ops() -> None:
+    boilerplate_unary_ops(
+        False,
+        ["mov"],
+        (np.int32, [None]),
+        (np.int32, [None]),
+    )
     packs: list[tuple[type, list[str | None]]] = [
         (np.float32, [None, "none"]),
         (np.float16, ["l", "h"]),
@@ -415,6 +477,13 @@ def test_unary_ops() -> None:
     ]
     for dst, src in itertools.product(packs, unpacks):
         boilerplate_unary_ops(
+            False,
+            ["fmov"],
+            dst,
+            src,
+        )
+        boilerplate_unary_ops(
+            True,
             ["fmov"],
             dst,
             src,
@@ -429,6 +498,7 @@ def test_unary_ops() -> None:
     ]
     for dst, src in itertools.product(packs, unpacks):
         boilerplate_unary_ops(
+            False,
             ["fround", "ftrunc", "ffloor", "fceil", "fdx", "fdy"],
             dst,
             src,
@@ -443,6 +513,7 @@ def test_unary_ops() -> None:
     ]
     for dst, src in itertools.product(packs, unpacks):
         boilerplate_unary_ops(
+            False,
             ["ftoin", "ftoiz"],
             dst,
             src,
@@ -456,6 +527,7 @@ def test_unary_ops() -> None:
     ]
     for dst, src in itertools.product(packs, unpacks):
         boilerplate_unary_ops(
+            False,
             ["ftouz"],
             dst,
             src,
@@ -470,51 +542,60 @@ def test_unary_ops() -> None:
     #     )
 
     boilerplate_unary_ops(
+        False,
         ["bnot", "neg"],
         (np.int32, [None]),
         (np.int32, [None]),
     )
     boilerplate_unary_ops(
+        False,
         ["itof"],
         (np.float32, [None]),
         (np.int32, [None]),
     )
     boilerplate_unary_ops(
+        False,
         ["clz"],
         (np.uint32, [None]),
         (np.uint32, [None]),
     )
     boilerplate_unary_ops(
+        False,
         ["utof"],
         (np.float32, [None]),
         (np.uint32, [None]),
     )
 
     boilerplate_unary_ops(
+        False,
         ["recip"],
         (np.float32, [None, "none"]),
         (np.float32, [None, "none"]),
         domain=(0.001, 1024),
     )
     boilerplate_unary_ops(
+        False,
         ["recip"],
         (np.float32, [None, "none"]),
         (np.float32, [None, "none"]),
         domain=(-1024, -0.001),
     )
     boilerplate_unary_ops(
+        False,
         ["exp"],
         (np.float32, [None, "none"]),
         (np.float32, [None, "none"]),
         domain=(-1.0, 1.0),
     )
     boilerplate_unary_ops(
+        False,
         ["sin"],
         (np.float32, [None, "none"]),
         (np.float32, [None, "none"]),
         domain=(-0.5, 0.5),
     )
     boilerplate_unary_ops(
+        False,
         ["rsqrt", "log", "rsqrt2"],
         (np.float32, [None, "none"]),
         (np.float32, [None, "none"]),
@@ -522,6 +603,7 @@ def test_unary_ops() -> None:
     )
 
     boilerplate_unary_ops(
+        False,
         ["ballot"],
         (np.int32, [None, "none"]),
         (np.int32, [None, "none"]),
@@ -529,18 +611,21 @@ def test_unary_ops() -> None:
     )
 
     boilerplate_unary_ops(
+        False,
         ["bcastf"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
     )
 
     boilerplate_unary_ops(
+        False,
         ["alleq"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
         domain=(123, 123),
     )
     boilerplate_unary_ops(
+        False,
         ["alleq"],
         (np.uint32, [None, "none"]),
         (np.uint32, [None, "none"]),
@@ -548,18 +633,21 @@ def test_unary_ops() -> None:
     )
 
     boilerplate_unary_ops(
+        False,
         ["allfeq"],
         (np.uint32, [None, "none"]),
         (np.float32, [None, "none"]),
         domain=(123, 123),
     )
     boilerplate_unary_ops(
+        False,
         ["allfeq"],
         (np.uint32, [None, "none"]),
         (np.float32, [None, "none"]),
         domain=(0, 10),
     )
     boilerplate_unary_ops(
+        False,
         ["allfeq"],
         (np.uint32, [None, "none"]),
         (np.float32, [None, "none"]),
