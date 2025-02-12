@@ -163,30 +163,71 @@ def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
             sub(reg_a_cur, reg_a_base, rf4)
             sub(reg_b_cur, reg_b_base, rf2)
 
-            mov(reg_k, reg_q)
-            with loop as lk:
-                eidx(rf1)
-                umul24(rf2, rf1, reg_a_stride)
-                add(rf2, rf2, reg_a_cur).add(reg_a_cur, reg_a_cur, 4)
-                mov(tmua, rf2, sig=thrsw)
-                shl(rf2, rf1, 2)
-                add(rf2, rf2, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride)
-                mov(tmua, rf2, sig=thrsw)
+            # start loading A
+            bxor(rf6, rf6, rf6)
+            bor(rf6, rf6, 5)
+            shl(rf6, rf6, 8)
+            bor(rf6, rf6, 4)
+            shl(rf6, rf6, 8)
+            bor(rf6, rf6, 3)
+            bxor(tmuc, -1, rf6)
 
-                nop(sig=ldtmu(rf1))
-                rotate(rf1, rf1, 1).mov(rep, rf1)
-                nop(sig=ldtmu(rf5))
-                nop().fmul(rf4, rf0, rf5)
-                for i in range(1, 16):
-                    rotate(rf1, rf1, 1).mov(rep, rf1)
-                    fadd(reg_accum[i - 1], reg_accum[i - 1], rf4).fmul(rf4, rf0, rf5)
-                fadd(reg_accum[15], reg_accum[15], rf4)
+            eidx(rf6)
+            umul24(rf7, rf6, reg_a_stride)
+            add(rf7, rf7, reg_a_cur).add(reg_a_cur, reg_a_cur, 8)
+            add(reg_a_cur, reg_a_cur, 8)
+            mov(tmua, rf7, sig=thrsw)
+
+            shr(reg_k, reg_q, 2)
+            with loop as lk:
+                # start loading B
+                eidx(rf6).mov(tmuc, -1)
+                shl(rf7, rf6, 2)
+                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride)
+                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride)
+                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride)
+                add(tmua, rf7, reg_b_cur, sig=thrsw).add(reg_b_cur, reg_b_cur, reg_b_stride)
+
+                # start loading next A and load A
+                bxor(rf6, rf6, rf6, sig=ldtmu(rf1))
+                bor(rf6, rf6, 5)
+                shl(rf6, rf6, 8)
+                bor(rf6, rf6, 4)
+                shl(rf6, rf6, 8)
+                bor(rf6, rf6, 3)
+                bnot(tmuc, rf6, sig=ldtmu(rf2))
+
+                eidx(rf6).mov(rf8, 8)
+                umul24(rf7, rf6, reg_a_stride, sig=ldtmu(rf3))
+                add(rf7, rf7, reg_a_cur).add(reg_a_cur, reg_a_cur, rf8, sig=ldtmu(rf4))
+                mov(tmua, rf7, sig=thrsw).add(reg_a_cur, reg_a_cur, rf8, sig=ldtmu(rf5))
+
+                # 16x4x16 FMA
+                rotate(rf[1], rf[1], 1).mov(rep, rf[1])
+                nop().fmul(rf6, rf0, rf5)
+                for j in range(1, 5):
+                    for i in range(1, 16):
+                        rotate(rf[j], rf[j], 1).mov(rep, rf[j])
+                        if i == 15 and j < 4:
+                            fadd(reg_accum[i - 1], reg_accum[i - 1], rf6).fmul(rf6, rf0, rf5, sig=ldtmu(rf5))
+                        else:
+                            fadd(reg_accum[i - 1], reg_accum[i - 1], rf6).fmul(rf6, rf0, rf5)
+                    if j < 4:
+                        rotate(rf[j + 1], rf[j + 1], 1).mov(rep, rf[j + 1])
+                        fadd(reg_accum[15], reg_accum[15], rf6).fmul(rf6, rf0, rf5)
+                    else:
+                        fadd(reg_accum[15], reg_accum[15], rf6)
 
                 sub(reg_k, reg_k, 1, cond="pushz")
                 lk.b(cond="anyna")
                 nop()  # delay slot
                 nop()  # delay slot
                 nop()  # delay slot
+
+                nop(sig=ldtmu(rf1))
+                nop(sig=ldtmu(rf2))
+                nop(sig=ldtmu(rf3))
+                nop(sig=ldtmu(rf4))
 
             eidx(rf1)
             shl(rf1, rf1, 2)
@@ -241,10 +282,11 @@ def sgemm_rnn_naive() -> None:
     r = 256 * 4
 
     assert p % (16 * 3) == 0
+    assert q % 4 == 0
     assert r % (16 * 4) == 0
 
     with Driver() as drv:
-        code = drv.program(lambda asm: qpu_sgemm_rnn_naive(asm, thread))
+        code = drv.program(qpu_sgemm_rnn_naive, thread)
 
         a: Array[np.float32] = drv.alloc((p, q), dtype=np.float32)
         b: Array[np.float32] = drv.alloc((q, r), dtype=np.float32)
