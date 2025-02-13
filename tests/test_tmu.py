@@ -674,7 +674,7 @@ def tmu_config(
 
 
 @qpu
-def qpu_tmu_op_write_add_read_prefetch(asm: Assembly) -> None:
+def qpu_tmu_op_write_with_tmud1(asm: Assembly, tmu_op: int) -> None:
     nop(sig=ldunifrf(rf11))  # dst addr
     nop(sig=ldunifrf(rf12))  # src1 addr
 
@@ -687,7 +687,7 @@ def qpu_tmu_op_write_add_read_prefetch(asm: Assembly) -> None:
     nop()
     nop(sig=ldtmu(rf12))  # rf12 = src1
 
-    tmu_config(asm, rf16, rf15, [(1, 0, 7)])
+    tmu_config(asm, rf16, rf15, [(1, tmu_op, 7)])
     mov(tmuc, rf16)
 
     mov(tmudref, rf12)
@@ -706,7 +706,7 @@ def qpu_tmu_op_write_add_read_prefetch(asm: Assembly) -> None:
     mov(tmud, rf12)
     mov(tmua, rf11)
 
-    # tmuwt()  # is not required. why?
+    tmuwt()
 
     nop(sig=thrsw)
     nop(sig=thrsw)
@@ -736,9 +736,9 @@ def qpu_tmu_op_write_add_read_prefetch(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_add_read_prefetch(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+def test_tmu_op_write_add(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_add_read_prefetch)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 0)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -756,51 +756,6 @@ def test_tmu_op_write_add_read_prefetch(initial: npt.NDArray[np.int32], src1: np
         assert np.all(actual[1] == initial)
 
 
-@qpu
-def qpu_tmu_op_write_sub_read_clear(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 1, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
-
-
 @hypothesis.given(
     initial=npst.arrays(
         dtype=np.int32,
@@ -819,9 +774,9 @@ def qpu_tmu_op_write_sub_read_clear(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_sub_read_clear(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+def test_tmu_op_write_sub(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_sub_read_clear)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 1)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -839,51 +794,6 @@ def test_tmu_op_write_sub_read_clear(initial: npt.NDArray[np.int32], src1: npt.N
         assert np.all(actual[1] == initial)
 
 
-@qpu
-def qpu_tmu_op_write_xchg_read_flush(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 2, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
-
-
 @hypothesis.given(
     initial=npst.arrays(
         dtype=np.int32,
@@ -902,9 +812,9 @@ def qpu_tmu_op_write_xchg_read_flush(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_xchg_read_flush(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+def test_tmu_op_write_xchg(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_xchg_read_flush)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 2)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -923,7 +833,7 @@ def test_tmu_op_write_xchg_read_flush(initial: npt.NDArray[np.int32], src1: npt.
 
 
 @qpu
-def qpu_tmu_op_write_cmpxchg_read_flush(asm: Assembly) -> None:
+def qpu_tmu_op_write_cmpxchg(asm: Assembly) -> None:
     nop(sig=ldunifrf(rf11))  # dst addr
     nop(sig=ldunifrf(rf12))  # src1 addr
     nop(sig=ldunifrf(rf13))  # diff addr
@@ -999,13 +909,13 @@ def qpu_tmu_op_write_cmpxchg_read_flush(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_cmpxchg_read_flush(
+def test_tmu_op_write_cmpxchg(
     initial: npt.NDArray[np.int32],
     diff: npt.NDArray[np.int32],
     src1: npt.NDArray[np.int32],
 ) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_cmpxchg_read_flush)
+        code = drv.program(qpu_tmu_op_write_cmpxchg)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         b: Array[np.int32] = drv.alloc(diff.shape, dtype=np.int32)
@@ -1028,51 +938,6 @@ def test_tmu_op_write_cmpxchg_read_flush(
         assert np.all(actual[1] == initial)
 
 
-@qpu
-def qpu_tmu_op_write_umin_full_l1_clear(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 4, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
-
-
 @hypothesis.given(
     initial=npst.arrays(
         dtype=np.uint32,
@@ -1091,9 +956,9 @@ def qpu_tmu_op_write_umin_full_l1_clear(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_umin_full_l1_clear(initial: npt.NDArray[np.uint32], src1: npt.NDArray[np.uint32]) -> None:
+def test_tmu_op_write_umin(initial: npt.NDArray[np.uint32], src1: npt.NDArray[np.uint32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_umin_full_l1_clear)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 4)
         actual: Array[np.uint32] = drv.alloc((2, 16), dtype=np.uint32)
         a: Array[np.uint32] = drv.alloc(src1.shape, dtype=np.uint32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -1109,51 +974,6 @@ def test_tmu_op_write_umin_full_l1_clear(initial: npt.NDArray[np.uint32], src1: 
 
         assert np.all(actual[0] == np.minimum(initial, src1))
         assert np.all(actual[1] == initial)
-
-
-@qpu
-def qpu_tmu_op_write_umax(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 5, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
 
 
 @hypothesis.given(
@@ -1176,7 +996,7 @@ def qpu_tmu_op_write_umax(asm: Assembly) -> None:
 )
 def test_tmu_op_write_umax(initial: npt.NDArray[np.uint32], src1: npt.NDArray[np.uint32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_umax)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 5)
         actual: Array[np.uint32] = drv.alloc((2, 16), dtype=np.uint32)
         a: Array[np.uint32] = drv.alloc(src1.shape, dtype=np.uint32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -1192,51 +1012,6 @@ def test_tmu_op_write_umax(initial: npt.NDArray[np.uint32], src1: npt.NDArray[np
 
         assert np.all(actual[0] == np.maximum(initial, src1))
         assert np.all(actual[1] == initial)
-
-
-@qpu
-def qpu_tmu_op_write_smin(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 6, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
 
 
 @hypothesis.given(
@@ -1259,7 +1034,7 @@ def qpu_tmu_op_write_smin(asm: Assembly) -> None:
 )
 def test_tmu_op_write_smin(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_smin)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 6)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -1275,51 +1050,6 @@ def test_tmu_op_write_smin(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.
 
         assert np.all(actual[0] == np.minimum(initial, src1))
         assert np.all(actual[1] == initial)
-
-
-@qpu
-def qpu_tmu_op_write_smax(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 7, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
 
 
 @hypothesis.given(
@@ -1342,7 +1072,7 @@ def qpu_tmu_op_write_smax(asm: Assembly) -> None:
 )
 def test_tmu_op_write_smax(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_smax)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 7)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -1360,51 +1090,6 @@ def test_tmu_op_write_smax(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.
         assert np.all(actual[1] == initial)
 
 
-@qpu
-def qpu_tmu_op_write_and_read_inc(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 8, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
-
-
 @hypothesis.given(
     initial=npst.arrays(
         dtype=np.int32,
@@ -1423,9 +1108,9 @@ def qpu_tmu_op_write_and_read_inc(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_and_read_inc(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+def test_tmu_op_write_and(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_and_read_inc)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 8)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -1443,51 +1128,6 @@ def test_tmu_op_write_and_read_inc(initial: npt.NDArray[np.int32], src1: npt.NDA
         assert np.all(actual[1] == initial)
 
 
-@qpu
-def qpu_tmu_op_write_or_read_dec(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 9, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
-
-
 @hypothesis.given(
     initial=npst.arrays(
         dtype=np.int32,
@@ -1506,9 +1146,9 @@ def qpu_tmu_op_write_or_read_dec(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_or_read_dec(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+def test_tmu_op_write_or(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_or_read_dec)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 9)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
@@ -1526,51 +1166,6 @@ def test_tmu_op_write_or_read_dec(initial: npt.NDArray[np.int32], src1: npt.NDAr
         assert np.all(actual[1] == initial)
 
 
-@qpu
-def qpu_tmu_op_write_xor_read_not(asm: Assembly) -> None:
-    nop(sig=ldunifrf(rf11))  # dst addr
-    nop(sig=ldunifrf(rf12))  # src1 addr
-
-    mov(tmuc, -1)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(tmua, rf12, rf1, sig=thrsw)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf12))  # rf12 = src1
-
-    tmu_config(asm, rf16, rf15, [(1, 10, 7)])
-    mov(tmuc, rf16)
-
-    mov(tmudref, rf12)
-
-    eidx(rf1)
-    shl(rf1, rf1, 2)
-    add(rf11, rf11, rf1)
-    mov(rf2, 4)
-    shl(rf2, rf2, rf2)
-    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
-    nop()
-    nop()
-
-    nop(sig=ldtmu(rf12))  # require
-
-    mov(tmud, rf12)
-    mov(tmua, rf11)
-
-    tmuwt()
-
-    nop(sig=thrsw)
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop(sig=thrsw)
-    nop()
-    nop()
-    nop()
-
-
 @hypothesis.given(
     initial=npst.arrays(
         dtype=np.int32,
@@ -1589,9 +1184,9 @@ def qpu_tmu_op_write_xor_read_not(asm: Assembly) -> None:
         ),
     ),
 )
-def test_tmu_op_write_xor_read_not(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+def test_tmu_op_write_xor(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
     with Driver() as drv:
-        code = drv.program(qpu_tmu_op_write_xor_read_not)
+        code = drv.program(qpu_tmu_op_write_with_tmud1, 10)
         actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
         a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
         unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
