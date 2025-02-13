@@ -920,3 +920,109 @@ def test_tmu_op_write_xchg_read_flush(initial: npt.NDArray[np.int32], src1: npt.
 
         assert np.all(actual[0] == src1)
         assert np.all(actual[1] == initial)
+
+
+@qpu
+def qpu_tmu_op_write_cmpxchg_read_flush(asm: Assembly) -> None:
+    nop(sig=ldunifrf(rf11))  # dst addr
+    nop(sig=ldunifrf(rf12))  # src1 addr
+    nop(sig=ldunifrf(rf13))  # diff addr
+
+    mov(tmuc, -1)
+
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(tmua, rf12, rf1, sig=thrsw)
+    nop()
+    nop()
+    nop(sig=ldtmu(rf12))  # rf12 = src1
+    add(tmua, rf13, rf1, sig=thrsw)
+    nop()
+    nop()
+    nop(sig=ldtmu(rf13))  # rf13 = diff
+
+    tmu_config(asm, rf16, rf15, [(1, 3, 7)])
+    mov(tmuc, rf16)
+
+    mov(tmudref, rf13)  # cmp target = diff
+    mov(tmuoff, rf12)  # xchg source
+
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(rf11, rf11, rf1)
+    mov(rf2, 4)
+    shl(rf2, rf2, rf2)
+    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
+    nop()
+    nop()
+
+    nop(sig=ldtmu(rf12))  # require
+
+    mov(tmud, rf12)
+    mov(tmua, rf11)
+
+    tmuwt()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+@hypothesis.given(
+    initial=npst.arrays(
+        dtype=np.int32,
+        shape=(16,),
+        elements=hypothesis.strategies.integers(
+            min_value=np.iinfo(np.int32).min,
+            max_value=np.iinfo(np.int32).max,
+        ),
+    ),
+    diff=npst.arrays(
+        dtype=np.int32,
+        shape=(16,),
+        elements=hypothesis.strategies.integers(
+            min_value=0,
+            max_value=1,
+        ),
+    ),
+    src1=npst.arrays(
+        dtype=np.int32,
+        shape=(16,),
+        elements=hypothesis.strategies.integers(
+            min_value=np.iinfo(np.int32).min,
+            max_value=np.iinfo(np.int32).max,
+        ),
+    ),
+)
+def test_tmu_op_write_cmpxchg_read_flush(
+    initial: npt.NDArray[np.int32],
+    diff: npt.NDArray[np.int32],
+    src1: npt.NDArray[np.int32],
+) -> None:
+    with Driver() as drv:
+        code = drv.program(qpu_tmu_op_write_cmpxchg_read_flush)
+        actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
+        a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
+        b: Array[np.int32] = drv.alloc(diff.shape, dtype=np.int32)
+        unif: Array[np.uint32] = drv.alloc(3, dtype=np.uint32)
+
+        actual[0, :] = initial
+        actual[1, :] = 1
+        a[:] = src1
+        b[:] = initial + diff
+
+        expect = np.where(diff == 0, src1, initial)
+
+        unif[0] = actual.addresses()[0, 0]
+        unif[1] = a.addresses()[0]
+        unif[2] = b.addresses()[0]
+
+        drv.execute(code, unif.addresses()[0])
+
+        assert np.all(actual[0] == expect)
+        assert np.all(actual[1] == initial)
