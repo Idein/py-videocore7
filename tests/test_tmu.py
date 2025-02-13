@@ -19,7 +19,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import hypothesis
+import hypothesis.stateful
+import hypothesis.strategies
 import numpy as np
+import numpy.typing as npt
+from hypothesis.extra import numpy as npst
 
 from videocore7.assembler import *
 from videocore7.assembler import Assembly, TMULookUpConfig, qpu
@@ -647,3 +651,189 @@ def test_tmu_read_tmu_write_uniform_read() -> None:
 
         assert np.all(data == 2)
         assert np.all(result == 2)  # !? not 3 ?
+
+
+@qpu
+def tmu_config(
+    asm: Assembly,
+    reg: Register,
+    tmp: Register,
+    config: list[tuple[int, int, int]],
+) -> None:
+    mov(reg, -1)
+
+    for per, op, type in config:
+        mov(tmp, per)
+        shl(tmp, tmp, 4)
+        bor(tmp, tmp, op)
+        shl(tmp, tmp, 3)
+        bor(tmp, tmp, type)
+
+        shl(reg, reg, 8)
+        bor(reg, reg, tmp)
+
+
+@qpu
+def qpu_tmu_op_write_add_read_prefetch(asm: Assembly) -> None:
+    nop(sig=ldunifrf(rf11))  # dst addr
+    nop(sig=ldunifrf(rf12))  # src1 addr
+
+    mov(tmuc, -1)
+
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(tmua, rf12, rf1, sig=thrsw)
+    nop()
+    nop()
+    nop(sig=ldtmu(rf12))  # rf12 = src1
+
+    tmu_config(asm, rf16, rf15, [(1, 0, 7)])
+    mov(tmuc, rf16)
+
+    mov(tmudref, rf12)
+
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(rf11, rf11, rf1)
+    mov(rf2, 4)
+    shl(rf2, rf2, rf2)
+    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
+    nop()
+    nop()
+
+    nop(sig=ldtmu(rf12))  # require
+
+    mov(tmud, rf12)
+    mov(tmua, rf11)
+
+    # tmuwt()  # is not required. why?
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+@hypothesis.given(
+    initial=npst.arrays(
+        dtype=np.int32,
+        shape=(16,),
+        elements=hypothesis.strategies.integers(
+            min_value=np.iinfo(np.int32).min,
+            max_value=np.iinfo(np.int32).max,
+        ),
+    ),
+    src1=npst.arrays(
+        dtype=np.int32,
+        shape=(16,),
+        elements=hypothesis.strategies.integers(
+            min_value=np.iinfo(np.int32).min,
+            max_value=np.iinfo(np.int32).max,
+        ),
+    ),
+)
+def test_tmu_op_write_add_read_prefetch(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+    with Driver() as drv:
+        code = drv.program(qpu_tmu_op_write_add_read_prefetch)
+        actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
+        a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
+        unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
+
+        actual[0, :] = initial
+        actual[1, :] = 1
+        a[:] = src1
+
+        unif[0] = actual.addresses()[0, 0]
+        unif[1] = a.addresses()[0]
+
+        drv.execute(code, unif.addresses()[0])
+
+        assert np.all(actual[0] == initial + src1)
+        assert np.all(actual[1] == initial)
+
+
+@qpu
+def qpu_tmu_op_write_sub_read_clear(asm: Assembly) -> None:
+    nop(sig=ldunifrf(rf11))  # dst addr
+    nop(sig=ldunifrf(rf12))  # src1 addr
+
+    mov(tmuc, -1)
+
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(tmua, rf12, rf1, sig=thrsw)
+    nop()
+    nop()
+    nop(sig=ldtmu(rf12))  # rf12 = src1
+
+    tmu_config(asm, rf16, rf15, [(1, 1, 7)])
+    mov(tmuc, rf16)
+
+    mov(tmudref, rf12)
+
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(rf11, rf11, rf1)
+    mov(rf2, 4)
+    shl(rf2, rf2, rf2)
+    mov(tmua, rf11, sig=thrsw).add(rf11, rf11, rf2)
+    nop()
+    nop()
+
+    nop(sig=ldtmu(rf12))  # require
+
+    mov(tmud, rf12)
+    mov(tmua, rf11)
+
+    tmuwt()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+@hypothesis.given(
+    initial=npst.arrays(
+        dtype=np.int32,
+        shape=(16,),
+        elements=hypothesis.strategies.integers(
+            min_value=np.iinfo(np.int32).min,
+            max_value=np.iinfo(np.int32).max,
+        ),
+    ),
+    src1=npst.arrays(
+        dtype=np.int32,
+        shape=(16,),
+        elements=hypothesis.strategies.integers(
+            min_value=np.iinfo(np.int32).min,
+            max_value=np.iinfo(np.int32).max,
+        ),
+    ),
+)
+def test_tmu_op_write_sub_read_clear(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.int32]) -> None:
+    with Driver() as drv:
+        code = drv.program(qpu_tmu_op_write_sub_read_clear)
+        actual: Array[np.int32] = drv.alloc((2, 16), dtype=np.int32)
+        a: Array[np.int32] = drv.alloc(src1.shape, dtype=np.int32)
+        unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
+
+        actual[0, :] = initial
+        actual[1, :] = 1
+        a[:] = src1
+
+        unif[0] = actual.addresses()[0, 0]
+        unif[1] = a.addresses()[0]
+
+        drv.execute(code, unif.addresses()[0])
+
+        assert np.all(actual[0] == initial - src1)
+        assert np.all(actual[1] == initial)
