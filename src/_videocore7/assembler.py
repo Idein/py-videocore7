@@ -24,7 +24,7 @@ import functools
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from types import TracebackType
-from typing import Annotated, Concatenate, Final, Self, cast, overload
+from typing import Annotated, Concatenate, Final, Literal, Self, cast, overload
 
 from .util import pack_unpack
 
@@ -1959,11 +1959,14 @@ class Link:
         pass
 
 
-class Condition:
-    _name: str
+type BranchConditionLiteral = Literal["always", "a0", "na0", "alla", "anyna", "anya", "allna"]
+
+
+class BranchCondition:
+    _name: BranchConditionLiteral
     _code: int
 
-    def __init__(self: Self, name: str, code: int) -> None:
+    def __init__(self: Self, name: BranchConditionLiteral, code: int) -> None:
         self._name = name
         self._code = code
 
@@ -1976,22 +1979,19 @@ class Condition:
         return self._code
 
 
-_conditions: dict[str, Condition] = {
-    name: Condition(name, code)
-    for name, code in [
-        ("always", 0),
-        ("a0", 2),
-        ("na0", 3),
-        ("alla", 4),
-        ("anyna", 5),
-        ("anya", 6),
-        ("allna", 7),
-    ]
+_conditions: dict[BranchConditionLiteral, BranchCondition] = {
+    "always": BranchCondition("always", 0),
+    "a0": BranchCondition("a0", 2),
+    "na0": BranchCondition("na0", 3),
+    "alla": BranchCondition("alla", 4),
+    "anyna": BranchCondition("anyna", 5),
+    "anya": BranchCondition("anya", 6),
+    "allna": BranchCondition("allna", 7),
 }
 
 
 class Branch(Instruction):
-    _cond: Condition
+    _cond: BranchCondition
     _raddr_a: int | None
     _addr_label: Reference | None
     _addr: int | None
@@ -2005,7 +2005,7 @@ class Branch(Instruction):
         asm: Assembly,
         src: int | Register | Reference | Link | None,
         *,
-        cond: str,
+        cond: BranchConditionLiteral,
         absolute: bool = False,
         set_link: bool = False,
     ) -> None:
@@ -2109,7 +2109,7 @@ class Loop:
     def b(
         self: Self,
         *,
-        cond: str,
+        cond: BranchConditionLiteral,
         absolute: bool = False,
         set_link: bool = False,
     ) -> Branch:

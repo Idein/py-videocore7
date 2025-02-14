@@ -4,6 +4,7 @@ from _videocore7.assembler import ALUWithoutSMIMM as ALUWithoutSMIMM
 from _videocore7.assembler import ALUWithSMIMM as ALUWithSMIMM
 from _videocore7.assembler import Assembly as Assembly
 from _videocore7.assembler import Branch as Branch
+from _videocore7.assembler import BranchConditionLiteral as BranchConditionLiteral
 from _videocore7.assembler import Label as Label
 from _videocore7.assembler import LabelNameSpace as LabelNameSpace
 from _videocore7.assembler import Link as Link
@@ -26,7 +27,7 @@ R: Final[ReferenceHelper]
 def b(
     src: int | Register | Reference | Link | None,
     *,
-    cond: str,
+    cond: BranchConditionLiteral,
     absolute: bool = False,
     set_link: bool = False,
 ) -> Branch: ...
