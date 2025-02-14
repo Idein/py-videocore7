@@ -297,3 +297,46 @@ def test_barrier() -> None:
         drv.execute(code, unif.addresses()[0, 0], wgs_per_sg=thread, thread=thread)
 
         assert np.all(y == np.concatenate([x[1:], x[:1]]))
+
+
+@qpu
+def qpu_parallel_full(asm: Assembly) -> None:
+    tidx(rf1, sig=ldunifrf(rf2))
+    shl(rf1, rf1, 6)
+    add(rf2, rf2, rf1, sig=thrsw)
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(rf2, rf2, rf1)
+
+    tidx(tmud)
+    mov(tmua, rf2)
+    tmuwt()
+
+    barrierid(syncb, sig=thrsw)
+    nop()
+    nop()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+def test_parallel_full() -> None:
+    """48 Threads."""
+    with Driver() as drv:
+        code = drv.program(qpu_parallel_full)
+        dst: Array[np.uint32] = drv.alloc((48, 16), dtype=np.uint32)
+        unif: Array[np.uint32] = drv.alloc(1, dtype=np.uint32)
+
+        dst[:] = 0xDEADBEEF
+
+        unif[0] = dst.addresses()[0, 0]
+
+        drv.execute(code, unif.addresses()[0], workgroup=(4, 4, 3), thread=48, threading=True)
+
+        assert np.all(dst == np.arange(48, dtype=np.uint32).reshape(48, 1))
