@@ -278,25 +278,25 @@ class DRM_V3D:  # noqa: N801
         out_sync: int,
     ) -> None:
         if self._fd is None:
-            raise ValueError("already closed")
+            raise ValueError(f"fd({self._fd}) already closed")
         if len(cfg) != 7:
-            raise ValueError("cfg has invalid length")
+            raise ValueError(f"cfg has invalid length({len(cfg)})")
         if len(coef) != 4:
-            raise ValueError("coef has invalid length")
+            raise ValueError(f"coef has invalid length({len(coef)})")
         for i, x in enumerate(cfg):
             if x < 0 or 0xFFFFFFFF < x:
-                raise ValueError(f"cfg[{i}] has out of range value")
+                raise ValueError(f"cfg[{i}]({x}) has out of range value")
         for i, x in enumerate(coef):
             if x < 0 or 0xFFFFFFFF < x:
-                raise ValueError(f"coef[{i}] has out of range value")
+                raise ValueError(f"coef[{i}]({x}) has out of range value")
         if bo_handles < 0 or 0xFFFFFFFFFFFFFFFF < bo_handles:
-            raise ValueError("bo_handles is out of range")
+            raise ValueError(f"bo_handles({bo_handles}) is out of range")
         if bo_handle_count < 0 or 0xFFFFFFFF < bo_handle_count:
-            raise ValueError("bo_handle_count is out of range")
+            raise ValueError(f"bo_handle_count({bo_handle_count}) is out of range")
         if in_sync < 0 or 0xFFFFFFFF < in_sync:
-            raise ValueError("in_sync is out of range")
+            raise ValueError(f"in_sync({in_sync}) is out of range")
         if out_sync < 0 or 0xFFFFFFFF < out_sync:
-            raise ValueError("out_sync is out of range")
+            raise ValueError(f"out_sync({out_sync}) is out of range")
         st = self._st_v3d_submit_csd(
             # XXX: Dirty hack!
             cfg=(c_uint32 * 7)(*cfg),

@@ -18,11 +18,12 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-
 import time
-from typing import Literal
+from typing import Any, Literal
 
+import hypothesis
+import hypothesis.stateful
+import hypothesis.strategies
 import numpy as np
 
 from videocore7.assembler import *
@@ -340,3 +341,213 @@ def test_parallel_full() -> None:
         drv.execute(code, unif.addresses()[0], workgroup=(4, 4, 3), thread=48, threading=True)
 
         assert np.all(dst == np.arange(48, dtype=np.uint32).reshape(48, 1))
+
+
+@qpu
+def qpu_parallel_with_workgroup(asm: Assembly, workgroup: tuple[int, int, int]) -> None:
+    wg_x, wg_y, wg_z = workgroup
+    wg_size = wg_x * wg_y * wg_z
+
+    def next_pow2(x: int) -> int:
+        return 1 << (x - 1).bit_length()
+
+    def ffs(x: int) -> int:
+        return (x & -x).bit_length()
+
+    local_invocation_index_bits = ffs(next_pow2(max(wg_size, 64))) - 1
+
+    reg_wg_x_id = rf20
+    reg_wg_y_id = rf21
+    reg_wg_z_id = rf22
+    reg_wg_id = rf23
+    reg_local_invocation_id = rf24
+    reg_global_invocation_id = rf25
+    reg_local_x_id = rf27
+    reg_local_y_id = rf28
+    reg_local_z_id = rf29
+
+    # pick threaad info
+    mov(reg_wg_x_id, rf3.unpack("ul"))
+    mov(reg_wg_y_id, rf3.unpack("uh"))
+    mov(reg_wg_z_id, rf2.unpack("ul"))
+    mov(rf2, rf2.unpack("uh"))
+    shr(reg_local_invocation_id, rf2, 16 - local_invocation_index_bits)
+
+    # each axis local (= in workgroup) id
+    mov(rf1, wg_x)
+    umul24(rf1, rf1, wg_y)
+    mov(rf2, reg_local_invocation_id, cond="pushn").mov(reg_local_z_id, -1)
+    with loop as mod_xy:
+        mod_xy.b(cond="anyna")
+        add(reg_local_z_id, reg_local_z_id, 1, cond="ifna")
+        sub(rf2, rf2, rf1, cond="ifna")
+        mov(null, rf2, cond="pushn")
+    add(rf2, rf2, rf1, cond="pushn").mov(rf1, wg_x)
+    mov(reg_local_y_id, -1)
+    with loop as mod_x:
+        mod_x.b(cond="anyna")
+        add(reg_local_y_id, reg_local_y_id, 1, cond="ifna")
+        sub(rf2, rf2, rf1, cond="ifna")
+        mov(null, rf2, cond="pushn")
+    add(reg_local_x_id, rf2, rf1)
+
+    # wg_id = wg_x_id + wg_x * (wg_y_id + wg_y * wg_z_id)
+    mov(rf1, reg_wg_z_id)
+    umul24(rf1, rf1, wg_y)
+    add(rf1, rf1, reg_wg_y_id)
+    umul24(rf1, rf1, wg_x)
+    add(reg_wg_id, rf1, reg_wg_x_id)
+
+    # global_invocation_id = wg_id * wg_size + local_invocation_id
+    umul24(rf1, reg_wg_id, wg_x)
+    umul24(rf1, rf1, wg_y)
+    umul24(rf1, rf1, wg_z)
+    add(reg_global_invocation_id, rf1, reg_local_invocation_id)
+
+    shl(rf12, reg_global_invocation_id, 2)
+
+    mov(tmud, reg_global_invocation_id, sig=ldunifrf(rf11))
+    add(tmua, rf11, rf12)
+
+    mov(tmud, reg_local_x_id, sig=ldunifrf(rf11))
+    add(tmua, rf11, rf12)
+
+    mov(tmud, reg_local_y_id, sig=ldunifrf(rf11))
+    add(tmua, rf11, rf12)
+
+    mov(tmud, reg_local_z_id, sig=ldunifrf(rf11))
+    add(tmua, rf11, rf12)
+
+    # mov(tmud, reg_wg_x_id, sig=ldunifrf(rf11))
+    # add(tmua, rf11, rf12)
+
+    # mov(tmud, reg_wg_y_id, sig=ldunifrf(rf11))
+    # add(tmua, rf11, rf12)
+
+    # mov(tmud, reg_wg_z_id, sig=ldunifrf(rf11))
+    # add(tmua, rf11, rf12)
+
+    tmuwt()
+
+    barrierid(syncb, sig=thrsw)
+    nop()
+    nop()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+def case_parallel_with_workgroup(n: int, workgroup: tuple[int, int, int], threading: bool) -> None:
+    wg_x, wg_y, wg_z = workgroup
+    wg_size = wg_x * wg_y * wg_z
+    thread = n * wg_size // 16
+    with Driver() as drv:
+        code = drv.program(qpu_parallel_with_workgroup, workgroup)
+        dst_wg_id: Array[np.uint32] = drv.alloc((n, *reversed(workgroup)), dtype=np.uint32)
+        dst_local_x_id: Array[np.uint32] = drv.alloc((n, *reversed(workgroup)), dtype=np.uint32)
+        dst_local_y_id: Array[np.uint32] = drv.alloc((n, *reversed(workgroup)), dtype=np.uint32)
+        dst_local_z_id: Array[np.uint32] = drv.alloc((n, *reversed(workgroup)), dtype=np.uint32)
+        unif: Array[np.uint32] = drv.alloc(4, dtype=np.uint32)
+
+        dst_wg_id[:] = 0xDEADBEEF
+        dst_local_x_id[:] = 0xDEADBEEF
+        dst_local_y_id[:] = 0xDEADBEEF
+        dst_local_z_id[:] = 0xDEADBEEF
+
+        unif[0] = dst_wg_id.addresses().item(0)
+        unif[1] = dst_local_x_id.addresses().item(0)
+        unif[2] = dst_local_y_id.addresses().item(0)
+        unif[3] = dst_local_z_id.addresses().item(0)
+
+        slice_count = 3
+        qpu_per_slice = 4
+        qpu_count = slice_count * qpu_per_slice
+        max_thread_per_qpu = 4 if threading else 2
+        max_elements_per_sg = qpu_count * max_thread_per_qpu // 2 * 16
+        max_wgs_per_sg = max_elements_per_sg // wg_size
+
+        drv.execute(
+            code,
+            unif.addresses()[0],
+            workgroup=workgroup,
+            thread=thread,
+            wgs_per_sg=max_wgs_per_sg,
+            threading=threading,
+        )
+
+        # np.set_printoptions(threshold=10000000)
+        # print(f"workgroup: {workgroup}")
+        # print(f"thread: {thread}")
+        # print("wg_id")
+        # print(dst_wg_id)
+        # print("local_x_id")
+        # print(dst_local_x_id)
+        # print("local_y_id")
+        # print(dst_local_y_id)
+        # print("local_z_id")
+        # print(dst_local_z_id)
+
+        assert np.all(dst_wg_id == np.arange(n * wg_size).reshape(n, *reversed(workgroup)))
+        assert np.all(dst_local_x_id[:] == np.arange(wg_x).reshape(1, 1, wg_x))
+        assert np.all(dst_local_y_id[:] == np.arange(wg_y).reshape(1, wg_y, 1))
+        assert np.all(dst_local_z_id[:] == np.arange(wg_z).reshape(wg_z, 1, 1))
+
+
+@hypothesis.strategies.composite
+def hypothesis_strategies_workgroup(draw: Any) -> tuple[tuple[int, int, int], bool]:
+    threading = draw(hypothesis.strategies.booleans())
+    limit = 255 if threading else 192
+
+    # wg_size = wg_x * wg_y * wg_z must be multiple of 16
+    # wg_x < 16, wg_y < 16, wg_z < 16
+
+    [a, b] = draw(
+        hypothesis.strategies.lists(
+            hypothesis.strategies.sampled_from(range(4)),
+            min_size=2,
+            max_size=2,
+            unique=True,
+        )
+    )
+
+    pow = [min(a, b), abs(b - a), 4 - max(a, b)]
+    rng = draw(hypothesis.strategies.randoms())
+    rng.shuffle(pow)
+    a, b, c = pow
+
+    pow_of_two_x = 2**a
+    pow_of_two_y = 2**b
+    pow_of_two_z = 2**c
+
+    lim = limit // 16
+
+    x = draw(hypothesis.strategies.integers(min_value=1, max_value=min(15 // pow_of_two_x, lim)))
+    lim //= x
+    y = draw(hypothesis.strategies.integers(min_value=1, max_value=min(15 // pow_of_two_y, lim)))
+    lim //= y
+    z = draw(hypothesis.strategies.integers(min_value=1, max_value=min(15 // pow_of_two_z, lim)))
+
+    wg = [x * pow_of_two_x, y * pow_of_two_y, z * pow_of_two_z]
+    rng = draw(hypothesis.strategies.randoms())
+    rng.shuffle(wg)
+    wg_x, wg_y, wg_z = wg
+
+    if (wg_x * wg_y * wg_z) > limit:
+        print(f"wg_x: {wg_x}, wg_y: {wg_y}, wg_z: {wg_z}, limit: {limit}")
+    hypothesis.assume((wg_x * wg_y * wg_z) <= limit)
+
+    return (wg_x, wg_y, wg_z), threading
+
+
+@hypothesis.given(
+    n=hypothesis.strategies.integers(min_value=1, max_value=32),
+    wg_and_threading=hypothesis_strategies_workgroup(),
+)
+def test_parallel_with_workgroup(n: int, wg_and_threading: tuple[tuple[int, int, int], bool]) -> None:
+    case_parallel_with_workgroup(n, *wg_and_threading)
