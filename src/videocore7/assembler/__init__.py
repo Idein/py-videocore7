@@ -1,1 +1,9 @@
-from _videocore7.assembler import Assembly, Register, TMULookUpConfig, assemble, qpu
+from _videocore7.assembler import (
+    ALUConditionLiteral,
+    Assembly,
+    BranchConditionLiteral,
+    Register,
+    TMULookUpConfig,
+    assemble,
+    qpu,
+)

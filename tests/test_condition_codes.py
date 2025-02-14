@@ -37,7 +37,7 @@ def qpu_cond_push_a(asm: Assembly) -> None:
     mov(rf11, 4)
     shl(rf11, rf11, 4)
 
-    cond_pairs = [
+    cond_pairs: list[tuple[ALUConditionLiteral, ALUConditionLiteral]] = [
         ("pushz", "ifa"),
         ("pushn", "ifna"),
         ("pushc", "ifa"),
@@ -179,7 +179,7 @@ def test_cond_push_b() -> None:
 
 # `cond = '{and,nor}*'` updates the conditional flag A and it don't affect to B
 @qpu
-def qpu_cond_update(asm: Assembly, cond_update_flags: list[str]) -> None:
+def qpu_cond_update(asm: Assembly, cond_update_flags: list[ALUConditionLiteral]) -> None:
     eidx(rf10, sig=ldunifrf(rf12))
     shl(rf10, rf10, 2)
     add(rf12, rf12, rf10)
@@ -219,7 +219,7 @@ def qpu_cond_update(asm: Assembly, cond_update_flags: list[str]) -> None:
 
 
 def test_cond_update() -> None:
-    cond_update_flags: list[str] = [
+    cond_update_flags: list[ALUConditionLiteral] = [
         "andz",
         "andnz",
         "nornz",
