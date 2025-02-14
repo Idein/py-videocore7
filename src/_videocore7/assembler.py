@@ -280,6 +280,9 @@ class Signal:
         return self._dst
 
 
+type SignalArg = Signal | list[Signal] | None
+
+
 class LoadSignal:
     _name: str
 
@@ -1133,7 +1136,7 @@ class ALUOp(ABC):
         src1: int | float | Register | None = None,
         src2: int | float | Register | None = None,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         assert opr in self.OPERATIONS
 
@@ -1163,8 +1166,14 @@ class ALUOp(ABC):
 
         self._cond = cond
         self._sigs = Signals()
-        if sig is not None:
-            self.sigs.add(sig)
+        match sig:
+            case Signal():
+                self.sigs.add(sig)
+            case list():
+                for s in sig:
+                    self.sigs.add(s)
+            case None:
+                pass
 
     @abstractmethod
     def pack(self: Self) -> int: ...
@@ -1217,7 +1226,7 @@ class AddALUOp(ALUOp):
         src1: int | float | Register | None = None,
         src2: int | float | Register | None = None,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         super().__init__(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1364,7 +1373,7 @@ class MulALUOp(ALUOp):
         src1: int | float | Register | None = None,
         src2: int | float | Register | None = None,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         super().__init__(opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1443,7 +1452,7 @@ class ALU(Instruction):
         src1: int | float | Register | None = None,
         src2: int | float | Register | None = None,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         super().__init__(asm)
 
@@ -1464,7 +1473,7 @@ class ALU(Instruction):
         src1: int | float | Register | None = None,
         src2: int | float | Register | None = None,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         if self._mul_op is not None:
             raise AssembleError(f'Conflict Mul ALU operation. "{self._mul_op.name}" is already issued.')
@@ -1513,7 +1522,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | float | Register | None = None,
         src2: int | float | Register | None = None,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         super().__init__(asm, opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1524,7 +1533,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def add(
@@ -1533,7 +1542,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: int,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def add(
@@ -1542,7 +1551,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def add(
         self: Self,
@@ -1550,7 +1559,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | Register,
         src2: int | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("add", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1561,7 +1570,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def sub(
@@ -1570,7 +1579,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: int,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def sub(
@@ -1579,7 +1588,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def sub(
         self: Self,
@@ -1587,7 +1596,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | Register,
         src2: int | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("sub", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1598,7 +1607,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def umul24(
@@ -1607,7 +1616,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: int,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def umul24(
@@ -1616,7 +1625,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def umul24(
         self: Self,
@@ -1624,7 +1633,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | Register,
         src2: int | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("umul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1635,7 +1644,7 @@ class ALUWithoutSMIMM(ALU):
         src1: float,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def vfmul(
@@ -1644,7 +1653,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: float,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def vfmul(
@@ -1653,7 +1662,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def vfmul(
         self: Self,
@@ -1661,7 +1670,7 @@ class ALUWithoutSMIMM(ALU):
         src1: float | Register,
         src2: float | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("vfmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1672,7 +1681,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def smul24(
@@ -1681,7 +1690,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: int,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def smul24(
@@ -1690,7 +1699,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def smul24(
         self: Self,
@@ -1698,7 +1707,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | Register,
         src2: int | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("smul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1709,7 +1718,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | float,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def multop(
@@ -1718,7 +1727,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: int | float,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def multop(
@@ -1727,7 +1736,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def multop(
         self: Self,
@@ -1735,7 +1744,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | float | Register,
         src2: int | float | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("multop", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1745,7 +1754,7 @@ class ALUWithoutSMIMM(ALU):
         dst: Register,
         src1: float,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def fmov(
@@ -1753,21 +1762,21 @@ class ALUWithoutSMIMM(ALU):
         dst: Register,
         src1: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def fmov(
         self: Self,
         dst: Register,
         src1: float | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("fmov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
 
     def nop(
         self: Self,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("nop", dst=Instruction.REGISTERS["null"], src1=None, src2=None, cond=cond, sig=sig)
 
@@ -1777,7 +1786,7 @@ class ALUWithoutSMIMM(ALU):
         dst: Register,
         src1: int | float,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def mov(
@@ -1785,14 +1794,14 @@ class ALUWithoutSMIMM(ALU):
         dst: Register,
         src1: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def mov(
         self: Self,
         dst: Register,
         src1: int | float | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("mov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
 
@@ -1803,7 +1812,7 @@ class ALUWithoutSMIMM(ALU):
         src1: float,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def fmul(
@@ -1812,7 +1821,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: float,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     @overload
     def fmul(
@@ -1821,7 +1830,7 @@ class ALUWithoutSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None: ...
     def fmul(
         self: Self,
@@ -1829,7 +1838,7 @@ class ALUWithoutSMIMM(ALU):
         src1: int | float | Register,
         src2: int | float | Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("fmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1845,7 +1854,7 @@ class ALUWithSMIMM(ALU):
         src1: int | float | Register | None = None,
         src2: int | float | Register | None = None,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         super().__init__(asm, opr=opr, dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1855,7 +1864,7 @@ class ALUWithSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("add", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1865,7 +1874,7 @@ class ALUWithSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("sub", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1875,7 +1884,7 @@ class ALUWithSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("umul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1885,7 +1894,7 @@ class ALUWithSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("vfmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1895,7 +1904,7 @@ class ALUWithSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("smul24", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1905,7 +1914,7 @@ class ALUWithSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("multop", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -1914,14 +1923,14 @@ class ALUWithSMIMM(ALU):
         dst: Register,
         src1: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("fmov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
 
     def nop(
         self: Self,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("nop", dst=Instruction.REGISTERS["null"], src1=None, src2=None, cond=cond, sig=sig)
 
@@ -1930,7 +1939,7 @@ class ALUWithSMIMM(ALU):
         dst: Register,
         src1: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("mov", dst=dst, src1=src1, src2=None, cond=cond, sig=sig)
 
@@ -1940,7 +1949,7 @@ class ALUWithSMIMM(ALU):
         src1: Register,
         src2: Register,
         cond: str | None = None,
-        sig: Signal | None = None,
+        sig: SignalArg = None,
     ) -> None:
         return self.dual_issue("fmul", dst=dst, src1=src1, src2=src2, cond=cond, sig=sig)
 
@@ -2134,7 +2143,7 @@ def binary_add_inst(
     src1: int | float | Register,
     src2: int | float | Register,
     cond: str | None = None,
-    sig: Signal | None = None,
+    sig: SignalArg = None,
 ) -> ALUWithSMIMM | ALUWithoutSMIMM:
     match (src1, src2):
         case (Register(), Register()):
@@ -2149,7 +2158,7 @@ def unary_add_inst(
     dst: Register,
     src: int | float | Register,
     cond: str | None = None,
-    sig: Signal | None = None,
+    sig: SignalArg = None,
 ) -> ALUWithSMIMM | ALUWithoutSMIMM:
     match src:
         case Register():
@@ -2163,7 +2172,7 @@ def nullary_add_inst(
     asm: Assembly,
     dst: Register = Instruction.REGISTERS["null"],
     cond: str | None = None,
-    sig: Signal | None = None,
+    sig: SignalArg = None,
 ) -> ALUWithSMIMM | ALUWithoutSMIMM:
     return ALUWithoutSMIMM(asm, name, dst=dst, cond=cond, sig=sig)
 
@@ -2175,7 +2184,7 @@ def binary_mul_inst(
     src1: int | float | Register,
     src2: int | float | Register,
     cond: str | None = None,
-    sig: Signal | None = None,
+    sig: SignalArg = None,
 ) -> None:
     match (src1, src2):
         case (Register(), Register()):
@@ -2190,7 +2199,7 @@ def unary_mul_inst(
     dst: Register,
     src: int | float | Register,
     cond: str | None = None,
-    sig: Signal | None = None,
+    sig: SignalArg = None,
 ) -> None:
     match src:
         case Register():
