@@ -340,9 +340,13 @@ class Signals(set[Signal]):
             frozenset(["ldvary", "wrtmuc"]): 20,
             frozenset(["thrsw", "ldvary", "wrtmuc"]): 21,
             frozenset(["ucb"]): 22,
-            frozenset(["rot"]): 23,
+            # 23 reserved
             frozenset(["ldunifa"]): 24,
             frozenset(["ldunifarf"]): 25,
+            frozenset(["ldtmu", "wrtmuc"]): 26,
+            frozenset(["thrsw", "ldtmu", "wrtmuc"]): 27,
+            # 28 reserved
+            # 29 reserved
             frozenset(["smimm_c"]): 30,
             frozenset(["smimm_d"]): 31,
         }
