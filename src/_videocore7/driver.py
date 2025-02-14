@@ -138,6 +138,9 @@ class Dispatcher:
         workgroup: tuple[int, int, int] = (16, 1, 1),
         wgs_per_sg: int = 16,
         thread: int = 1,
+        propagate_nan: bool = False,
+        single_seg: bool = False,
+        threading: bool = False,
     ) -> None:
         wg_x, wg_y, wg_z = workgroup
         wg_size = wg_x * wg_y * wg_z
@@ -155,7 +158,7 @@ class Dispatcher:
                 # Number of batches
                 thread,
                 # Shader address, pnan, singleseg, threading
-                code.addresses()[0],
+                code.addresses()[0] | (int(propagate_nan) << 2) | (int(single_seg) << 1) | int(threading),
                 # Uniforms address
                 uniforms if uniforms is not None else 0,
             ),
@@ -316,9 +319,21 @@ class Driver:
         workgroup: tuple[int, int, int] = (16, 1, 1),
         wgs_per_sg: int = 16,
         thread: int = 1,
+        propagate_nan: bool = False,
+        single_seg: bool = False,
+        threading: bool = False,
     ) -> None:
         with self.compute_shader_dispatcher(timeout_sec) as csd:
-            csd.dispatch(code, uniforms=uniforms, workgroup=workgroup, wgs_per_sg=wgs_per_sg, thread=thread)
+            csd.dispatch(
+                code,
+                uniforms=uniforms,
+                workgroup=workgroup,
+                wgs_per_sg=wgs_per_sg,
+                thread=thread,
+                propagate_nan=propagate_nan,
+                single_seg=single_seg,
+                threading=threading,
+            )
 
     @property
     def code_pos(self: Self) -> int:
