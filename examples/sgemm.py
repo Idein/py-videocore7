@@ -55,7 +55,6 @@ def load_params(asm: Assembly, thread: int, regs: list[Register]) -> None:
         assert thread in [1, 12, 24]
 
     band(rf3, rf0, rf1, sig=ldunifrf(rf7))  # rf3 = thread id
-    mov(rf15, rf3)
     shl(rf0, rf7, 2)
     umul24(rf0, rf0, rf3)
     eidx(rf1).add(rf0, rf0, rf6)
@@ -155,27 +154,15 @@ def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
         shr(reg_j, rf1, 4)
         with loop as lj:
             shl(rf1, reg_i, 4)
-            umul24(rf4, rf1, reg_c_stride)
-            shl(rf2, reg_j, 6)
-            sub(reg_c_cur, reg_c_base, rf4)
+            shl(rf2, reg_j, 6).umul24(rf4, rf1, reg_c_stride)
+            sub(reg_c_cur, reg_c_base, rf4).umul24(rf4, rf1, reg_a_stride)
             sub(reg_c_cur, reg_c_cur, rf2)
-            umul24(rf4, rf1, reg_a_stride)
-            sub(reg_a_cur, reg_a_base, rf4)
-            sub(reg_b_cur, reg_b_base, rf2)
+            sub(reg_a_cur, reg_a_base, rf4).sub(reg_b_cur, reg_b_base, rf2)
 
             # start loading A
-            bxor(rf6, rf6, rf6)
-            bor(rf6, rf6, 5)
-            shl(rf6, rf6, 8)
-            bor(rf6, rf6, 4)
-            shl(rf6, rf6, 8)
-            bor(rf6, rf6, 3)
-            bxor(tmuc, -1, rf6)
-
             eidx(rf6)
-            umul24(rf7, rf6, reg_a_stride)
-            add(rf7, rf7, reg_a_cur).add(reg_a_cur, reg_a_cur, 8)
-            add(reg_a_cur, reg_a_cur, 8)
+            bnot(tmuc, 3).umul24(rf7, rf6, reg_a_stride)  # pixel, regular, vec4
+            add(rf7, rf7, reg_a_cur).sub(reg_a_cur, reg_a_cur, -16)
             mov(tmua, rf7, sig=thrsw)
 
             shr(reg_k, reg_q, 2)
@@ -183,24 +170,16 @@ def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
                 # start loading B
                 eidx(rf6).mov(tmuc, -1)
                 shl(rf7, rf6, 2)
-                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride)
-                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride)
-                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride)
+                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride, sig=ldtmu(rf1))
+                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride, sig=ldtmu(rf2))
+                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride, sig=ldtmu(rf3))
                 add(tmua, rf7, reg_b_cur, sig=thrsw).add(reg_b_cur, reg_b_cur, reg_b_stride)
 
                 # start loading next A and load A
-                bxor(rf6, rf6, rf6, sig=ldtmu(rf1))
-                bor(rf6, rf6, 5)
-                shl(rf6, rf6, 8)
-                bor(rf6, rf6, 4)
-                shl(rf6, rf6, 8)
-                bor(rf6, rf6, 3)
-                bnot(tmuc, rf6, sig=ldtmu(rf2))
-
-                eidx(rf6).mov(rf8, 8)
-                umul24(rf7, rf6, reg_a_stride, sig=ldtmu(rf3))
-                add(rf7, rf7, reg_a_cur).add(reg_a_cur, reg_a_cur, rf8, sig=ldtmu(rf4))
-                mov(tmua, rf7, sig=thrsw).add(reg_a_cur, reg_a_cur, rf8, sig=ldtmu(rf5))
+                eidx(rf6, sig=ldtmu(rf4))
+                bnot(tmuc, 3).umul24(rf7, rf6, reg_a_stride)  # pixel, regular, vec4
+                add(rf7, rf7, reg_a_cur).sub(reg_a_cur, reg_a_cur, -16)
+                mov(tmua, rf7, sig=[thrsw, ldtmu(rf5)])
 
                 # 16x4x16 FMA
                 rotate(rf[1], rf[1], 1).mov(rep, rf[1])
@@ -231,7 +210,7 @@ def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
 
             eidx(rf1)
             shl(rf1, rf1, 2)
-            add(rf2, reg_c_cur, rf1)
+            mov(tmuc, -1).add(rf2, reg_c_cur, rf1)
             mov(tmua, rf2, sig=thrsw).add(rf2, rf2, reg_c_stride)
             fmul(reg_accum[0], reg_accum[0], reg_alpha)
             for i in range(1, 16):
@@ -247,9 +226,8 @@ def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
             shl(rf1, rf1, 2)
             add(rf2, reg_c_cur, rf1)
             for i in range(16):
-                mov(tmud, reg_accum[i])
+                mov(tmud, reg_accum[i]).mov(reg_accum[i], 0.0)
                 mov(tmua, rf2).add(rf2, rf2, reg_c_stride)
-                mov(reg_accum[i], 0.0)
                 tmuwt()
 
             sub(reg_j, reg_j, 1, cond="pushz")
@@ -263,6 +241,10 @@ def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
         nop()
         nop()
         nop()
+
+    barrierid(syncb, sig=thrsw)
+    nop()
+    nop()
 
     nop(sig=thrsw)
     nop(sig=thrsw)
@@ -344,8 +326,8 @@ def sgemm_rnn_naive() -> None:
             return (2 * p * q * r + 3 * p * r) / sec * 1e-9
 
         print(f"==== sgemm example ({p}x{q} times {q}x{r}) ====")
-        print(f"numpy: {time_ref:.4} sec, {gflops(time_ref):.4} Gflop/s")
-        print(f"QPU:   {time_gpu:.4} sec, {gflops(time_gpu):.4} Gflop/s")
+        print(f"numpy: {time_ref:.4f} sec, {gflops(time_ref):.4f} Gflop/s")
+        print(f"QPU:   {time_gpu:.4f} sec, {gflops(time_gpu):.4f} Gflop/s")
         print(f"Minimum absolute error: {np.min(np.abs(c - expected))}")
         print(f"Maximum absolute error: {np.max(np.abs(c - expected))}")
         print(f"Minimum relative error: {np.min(np.abs((c - expected) / expected))}")
