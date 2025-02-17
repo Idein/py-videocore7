@@ -1202,3 +1202,145 @@ def test_tmu_op_write_xor(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.i
 
         assert np.all(actual[0] == np.bitwise_xor(initial, src1))
         assert np.all(actual[1] == initial)
+
+
+@qpu
+def qpu_tmu_4x16_strided_rectangular_read(asm: Assembly) -> None:
+    reg_src_addr = rf20
+    reg_stride = rf21
+    reg_dst_addr = rf22
+
+    # load uniforms
+    nop(sig=ldunifrf(reg_src_addr))
+    nop(sig=ldunifrf(reg_stride))
+    nop(sig=ldunifrf(reg_dst_addr))
+
+    # TMU load offsets
+    eidx(rf1)
+    shr(rf2, rf1, 2)
+    band(rf1, rf1, 3)
+    shl(rf1, rf1, 4)
+    umul24(rf2, rf2, reg_stride)
+    shl(rf2, rf2, 2)
+    add(rf1, rf1, rf2)
+
+    # offsets = rf1 = \
+    # [[0,16,32,48] +  0 * stride,
+    #  [0,16,32,48] +  4 * stride,
+    #  [0,16,32,48] +  8 * stride,
+    #  [0,16,32,48] + 12 * stride]
+
+    # Request TMU Vec4 load
+    bnot(tmuc, 3)  # pixel, regular, vec4
+    add(tmua, rf1, reg_src_addr, sig=thrsw)
+
+    # Make shuffle idx
+    eidx(rf13)  # [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    shr(rf14, rf13, 2)  # [0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3]
+    band(rf13, rf13, 3)  # rf13 = [0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3]
+    shl(rf15, rf13, 2)  # [0,4,8,12,0,4,8,12,0,4,8,12,0,4,8,12]
+    add(rf14, rf14, rf15)  # rf14 = [0,4,8,12,1,5,9,13,2,6,10,14,3,7,11,15]
+
+    # TMU load x4
+    nop(sig=ldtmu(rf5))
+    nop(sig=ldtmu(rf6))
+    nop(sig=ldtmu(rf7))
+    nop(sig=ldtmu(rf8))
+
+    #
+    # (rf5~rf8) -- reshuffle -> (rf9~rf12)
+    #
+
+    shuffle(rf5, rf5, rf14)
+    shuffle(rf6, rf6, rf14)
+    shuffle(rf7, rf7, rf14)
+    shuffle(rf8, rf8, rf14)
+
+    rotate(rf6, rf6, -1)
+    rotate(rf7, rf7, -2)
+    rotate(rf8, rf8, -3)
+
+    mov(null, rf13, cond="pushz")
+    mov(rf9, rf5, cond="ifa").mov(rf10, rf8, cond="ifa")
+    mov(rf11, rf7, cond="ifa").mov(rf12, rf6, cond="ifa")
+
+    sub(null, rf13, 1, cond="pushz")
+    mov(rf9, rf6, cond="ifa").mov(rf10, rf5, cond="ifa")
+    mov(rf11, rf8, cond="ifa").mov(rf12, rf7, cond="ifa")
+
+    sub(null, rf13, 2, cond="pushz")
+    mov(rf9, rf7, cond="ifa").mov(rf10, rf6, cond="ifa")
+    mov(rf11, rf5, cond="ifa").mov(rf12, rf8, cond="ifa")
+
+    sub(null, rf13, 3, cond="pushz")
+    mov(rf9, rf8, cond="ifa").mov(rf10, rf7, cond="ifa")
+    mov(rf11, rf6, cond="ifa").mov(rf12, rf5, cond="ifa")
+
+    rotate(rf10, rf10, 1)
+    rotate(rf11, rf11, 2)
+    rotate(rf12, rf12, 3)
+
+    # Make store offsets
+    eidx(rf1)
+    shl(rf1, rf1, 2)
+    add(reg_dst_addr, reg_dst_addr, rf1)
+    mov(rf1, 1)
+    shl(rf1, rf1, 6)
+
+    # TMU store x4
+    mov(tmuc, -1)
+    mov(tmud, rf9)
+    mov(tmua, reg_dst_addr).add(reg_dst_addr, reg_dst_addr, rf1)
+    mov(tmud, rf10)
+    mov(tmua, reg_dst_addr).add(reg_dst_addr, reg_dst_addr, rf1)
+    mov(tmud, rf11)
+    mov(tmua, reg_dst_addr).add(reg_dst_addr, reg_dst_addr, rf1)
+    mov(tmud, rf12)
+    mov(tmua, reg_dst_addr).add(reg_dst_addr, reg_dst_addr, rf1)
+
+    tmuwt()
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+def case_tmu_4x16_strided_rectangular_read(height: int, width: int, upper_offset: int, left_offset: int) -> None:  # noqa: E741
+    assert height >= upper_offset + 4
+    assert width >= left_offset + 16
+    with Driver() as drv:
+        code = drv.program(qpu_tmu_4x16_strided_rectangular_read)
+        src: Array[np.int32] = drv.alloc((height, width), dtype=np.int32)
+        dst: Array[np.int32] = drv.alloc((4, 16), dtype=np.int32)
+        unif: Array[np.uint32] = drv.alloc(3, dtype=np.uint32)
+
+        src[:] = np.arange(height * width).reshape(height, width)
+        dst[:] = 0
+
+        unif[0] = src.addresses()[upper_offset, left_offset]
+        unif[1] = src.shape[1]
+        unif[2] = dst.addresses().item(0)
+
+        drv.execute(code, unif.addresses().item(0))
+
+        assert np.all(dst == src[upper_offset : upper_offset + 4, left_offset : left_offset + 16])
+
+
+@hypothesis.given(
+    pad_l=hypothesis.strategies.integers(min_value=0, max_value=15),
+    pad_r=hypothesis.strategies.integers(min_value=0, max_value=15),
+    pad_u=hypothesis.strategies.integers(min_value=0, max_value=15),
+    pad_d=hypothesis.strategies.integers(min_value=0, max_value=15),
+)
+def test_tmu_4x16_strided_rectangular_read(pad_l: int, pad_r: int, pad_u: int, pad_d: int) -> None:
+    case_tmu_4x16_strided_rectangular_read(
+        height=pad_u + 4 + pad_d,
+        width=pad_l + 16 + pad_r,
+        upper_offset=pad_u,
+        left_offset=pad_l,
+    )
