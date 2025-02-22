@@ -18,6 +18,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from collections import deque
 from time import CLOCK_MONOTONIC, clock_gettime
 
 import numpy as np
@@ -33,218 +34,202 @@ def getsec() -> float:
 
 
 @qpu
-def load_params(asm: Assembly, thread: int, regs: list[Register]) -> None:
-    if thread == 1:
-        bxor(rf0, rf0, rf0, sig=ldunifrf(rf6))
-        # rf0, rf1 = (0, _)
-    elif thread == 12:
-        #  8 threads (1 threads / qpu)
-        tidx(rf0, sig=ldunifrf(rf6))
-        shr(rf0, rf0, 2)
-        mov(rf1, 0b1111)
-        # rf0, rf1 = (tidx >> 2, 0b1111)
-    elif thread == 24:
-        # 16 threads (2 threads / qpu)
-        tidx(rf0, sig=ldunifrf(rf6))
-        mov(rf1, 1)
-        shr(rf0, rf0, 1)
-        shl(rf1, rf1, 5)
-        sub(rf1, rf1, 1)
-        # rf0, rf1 = (tidx >> 1, 0b11111)
-    else:
-        assert thread in [1, 12, 24]
-
-    band(rf3, rf0, rf1, sig=ldunifrf(rf7))  # rf3 = thread id
-    shl(rf0, rf7, 2)
-    umul24(rf0, rf0, rf3)
-    eidx(rf1).add(rf0, rf0, rf6)
-    shl(rf1, rf1, 2)
-    mov(rf3, 4)
-    shl(rf3, rf3, 4).add(rf0, rf0, rf1)
-    n = len(regs)
-    mov(tmua, rf0, sig=thrsw).add(rf0, rf0, rf3)
-    nop()
-    nop()
-    nop(sig=ldtmu(rf1))  # load unif_params[0:16] to rf1
-    for i in range(n):
-        if i % 16 == 0:
-            bcastf(regs[i], rf1)
-            rotate(rf1, rf1, 1)
-        elif i % 16 == 15 and i != n - 1:
-            mov(tmua, rf0, sig=thrsw).add(rf0, rf0, rf3)
-            bcastf(regs[i], rf1)
-            nop()
-            nop(sig=ldtmu(rf1))
-        else:
-            bcastf(regs[i], rf1)
-            rotate(rf1, rf1, 1)
-
-
-@qpu
-def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
+def qpu_sgemm_rnn_naive(asm: Assembly) -> None:
     # rf0 - rf15: regs
-    # rf16 - rf26: params (from uniform)
-    # rf32 - rf37: values
-    # rf48 - rf63: 16x16 accumulators
+    # rf16 - rf31: 16x16 accumulators
+    # rf32 - rf63: (unused)
+
+    reg_tile_i = rf1
+    reg_tile_j = rf2
+
+    reg_wg_id = rf2.unpack("ul")  # if workgroup is (1, 1, 16), wg_id = wg_z_id
+    mov(rf2, reg_wg_id, sig=ldunif)  # load tile_r
+    itof(rf4, rf2)  # rf4 = float(wg_id)
+    itof(rf5, rf0)  # rf0 = float(tile_r)
+    recip(rf3, rf5)  # rf3 = 1 / float(tile_r)
+    fmul(rf1, rf4, rf3)  # rf1=  wg_id / tile_r
+    ffloor(rf1, rf1)  # rf1 = floor(wg_id / tile_r)
+    ftouz(reg_tile_i, rf1)  # rf1 = i (/ tile_p)
+    umul24(rf3, rf1, rf0)  # rf3 = i * tile_r
+    sub(reg_tile_j, rf2, rf3)  # rf2 = j (/ tile_r)
 
     # params
-    reg_p = rf16
-    reg_q = rf17
-    reg_r = rf18
-    reg_a_base = rf19
-    reg_a_stride = rf20
-    reg_b_base = rf21
-    reg_b_stride = rf22
-    reg_c_base = rf23
-    reg_c_stride = rf24
-    reg_alpha = rf25
-    reg_beta = rf26
+    # rf0: free
+    # rf1: reg_tile_i
+    # rf2: reg_tile_j
+    # rf3: free
+    reg_a = [rf3, rf4, rf5, rf6]
+    reg_b = [rf7, rf8, rf9, rf10]
+    reg_i = rf11  # use after reg_c_stride is released
+    reg_a_stride = rf9  # use for init, unused in loop
+    reg_a_base = rf12
+    reg_b_stride = reg_b_stride_x4 = rf13
+    reg_b_base = rf14
+    reg_c_stride = rf10  # use for init, unused in loop
+    reg_c_base = rf15
+    reg_accum = [rf[i] for i in range(16, 32)]  # accumulators
 
-    # values
-    reg_a_cur = rf32
-    reg_b_cur = rf33
-    reg_c_cur = rf34
-    reg_i = rf35
-    reg_j = rf36
-    reg_k = rf37
+    # a_base = a[i,:] = a_item0_addr + 16 * i * a_stride
+    # b_base = b[:,j] = b_item0_addr + 16 * j * 4
+    nop(sig=ldunifrf(reg_a_stride))  # load a_stride
+    umul24(rf3, reg_tile_i, reg_a_stride, sig=ldunifrf(reg_a_base))  # load a_item0 addr
+    shl(rf3, rf3, 4)
+    add(reg_a_base, reg_a_base, rf3, sig=ldunifrf(reg_b_stride))  # load b_stride
+    shl(rf3, reg_tile_j, 6)
+    nop(sig=ldunifrf(reg_b_base))  # load b_item0 addr
+    eidx(rf3).add(reg_b_base, reg_b_base, rf3)  # eidx for next block
 
-    # accumulators
-    reg_accum = [rf[48 + i] for i in range(16)]
-
-    load_params(
-        asm,
-        thread,
-        [
-            reg_p,
-            reg_q,
-            reg_r,
-            reg_a_base,
-            reg_a_stride,
-            reg_b_base,
-            reg_b_stride,
-            reg_c_base,
-            reg_c_stride,
-            reg_alpha,
-            reg_beta,
-        ],
-    )
-
-    add(rf1, reg_p, 15)
-    shr(rf1, rf1, 4)
-    shl(rf1, rf1, 4)
-    add(rf2, reg_r, 15)
-    shr(rf2, rf2, 4)
-    shl(rf2, rf2, 6)
-    umul24(rf4, rf1, reg_a_stride)
+    # calc base addr of A and B
+    # eidx(rf3)  # merged pred instruction
+    umul24(rf4, rf3, reg_a_stride)
+    del reg_a_stride  # reg_a_stride is released
     add(reg_a_base, reg_a_base, rf4)
-    add(reg_b_base, reg_b_base, rf2)
-    umul24(rf4, rf1, reg_c_stride)
-    add(reg_c_base, reg_c_base, rf4)
-    add(reg_c_base, reg_c_base, rf2)
+    shr(rf4, rf3, 2)
+    band(rf3, rf3, 3)
+    shl(rf3, rf3, 4).umul24(rf4, rf4, reg_b_stride)
+    shl(reg_b_stride_x4, reg_b_stride, 2).add(rf3, rf3, rf4)  # keep 4*b_stride
+    del reg_b_stride  # reg_b_stride is released
+    add(reg_b_base, reg_b_base, rf3)
 
-    for i in range(16):
-        mov(reg_accum[i], 0.0)
+    # start loading A
+    bnot(tmuc, 3)
+    mov(tmua, reg_a_base)
 
-    # i=(p+15)/16.
-    add(rf1, reg_p, 15)
-    shr(reg_i, rf1, 4)
-    with loop as li:
-        # j=(r+15)/16
-        add(rf1, reg_r, 15)
-        shr(reg_j, rf1, 4)
-        with loop as lj:
-            shl(rf1, reg_i, 4)
-            shl(rf2, reg_j, 6).umul24(rf4, rf1, reg_c_stride)
-            sub(reg_c_cur, reg_c_base, rf4).umul24(rf4, rf1, reg_a_stride)
-            sub(reg_c_cur, reg_c_cur, rf2)
-            sub(reg_a_cur, reg_a_base, rf4).sub(reg_b_cur, reg_b_base, rf2)
+    # start loading B
+    bnot(tmuc, 3)
+    mov(tmua, reg_b_base, sig=thrsw).add(reg_b_base, reg_b_base, reg_b_stride_x4)
 
-            # start loading A
-            eidx(rf6)
-            bnot(tmuc, 3).umul24(rf7, rf6, reg_a_stride)  # pixel, regular, vec4
-            add(rf7, rf7, reg_a_cur).sub(reg_a_cur, reg_a_cur, -16)
-            mov(tmua, rf7, sig=thrsw)
+    sub(reg_a_base, reg_a_base, -16)
 
-            shr(reg_k, reg_q, 2)
-            with loop as lk:
-                # start loading B
-                eidx(rf6).mov(tmuc, -1)
-                shl(rf7, rf6, 2)
-                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride, sig=ldtmu(rf1))
-                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride, sig=ldtmu(rf2))
-                add(tmua, rf7, reg_b_cur).add(reg_b_cur, reg_b_cur, reg_b_stride, sig=ldtmu(rf3))
-                add(tmua, rf7, reg_b_cur, sig=thrsw).add(reg_b_cur, reg_b_cur, reg_b_stride)
+    # calc base addr of C
+    nop(sig=ldunifrf(reg_c_stride))  # load c_stride
+    shl(rf0, reg_tile_j, 2).umul24(rf3, reg_tile_i, reg_c_stride)
+    del reg_tile_i  # reg_tile_i is released
+    del reg_tile_j  # reg_tile_j is released
+    eidx(rf0).add(rf3, rf3, rf0, sig=ldunifrf(reg_c_base))  # c_item0_addr
+    shl(rf3, rf3, 4).umul24(rf0, rf0, reg_c_stride)
+    del reg_c_stride  # reg_c_stride is released
+    add(reg_c_base, reg_c_base, rf0, sig=ldunif)  # load q
+    shr(reg_i, rf0, 2).add(reg_c_base, reg_c_base, rf3)  # c_base[0] = c_item0_addr + 16 * i * c_stride + 16 * j * 4
 
-                # start loading next A and load A
-                eidx(rf6, sig=ldtmu(rf4))
-                bnot(tmuc, 3).umul24(rf7, rf6, reg_a_stride)  # pixel, regular, vec4
-                add(rf7, rf7, reg_a_cur).sub(reg_a_cur, reg_a_cur, -16)
-                mov(tmua, rf7, sig=[thrsw, ldtmu(rf5)])
+    for i in range(8):
+        r1 = reg_accum[i]
+        r2 = reg_accum[i + 8]
+        bxor(r1, r1, r1).sub(r2, r2, r2, sig=ldtmu((reg_a + reg_b)[i]))  # load reg_a and reg_b
+    with loop as lk:
+        # start loading next A
+        bnot(tmuc, 3)
+        mov(tmua, reg_a_base)
 
-                # 16x4x16 FMA
-                rotate(rf[1], rf[1], 1).mov(rep, rf[1])
-                nop().fmul(rf6, rf0, rf5)
-                for j in range(1, 5):
-                    for i in range(1, 16):
-                        rotate(rf[j], rf[j], 1).mov(rep, rf[j])
-                        if i == 15 and j < 4:
-                            fadd(reg_accum[i - 1], reg_accum[i - 1], rf6).fmul(rf6, rf0, rf5, sig=ldtmu(rf5))
-                        else:
-                            fadd(reg_accum[i - 1], reg_accum[i - 1], rf6).fmul(rf6, rf0, rf5)
-                    if j < 4:
-                        rotate(rf[j + 1], rf[j + 1], 1).mov(rep, rf[j + 1])
-                        fadd(reg_accum[15], reg_accum[15], rf6).fmul(rf6, rf0, rf5)
-                    else:
-                        fadd(reg_accum[15], reg_accum[15], rf6)
+        # start loading next B
+        bnot(tmuc, 3)
+        mov(tmua, reg_b_base, sig=thrsw).add(reg_b_base, reg_b_base, reg_b_stride_x4)
 
-                sub(reg_k, reg_k, 1, cond="pushz")
-                lk.b(cond="anyna")
-                nop()  # delay slot
-                nop()  # delay slot
-                nop()  # delay slot
+        sub(reg_a_base, reg_a_base, -16)
 
-                nop(sig=ldtmu(rf1))
-                nop(sig=ldtmu(rf2))
-                nop(sig=ldtmu(rf3))
-                nop(sig=ldtmu(rf4))
+        rotate_broadcast_reg_b_order = deque(reg_b * 16)
 
-            eidx(rf1)
-            shl(rf1, rf1, 2)
-            mov(tmuc, -1).add(rf2, reg_c_cur, rf1)
-            mov(tmua, rf2, sig=thrsw).add(rf2, rf2, reg_c_stride)
-            fmul(reg_accum[0], reg_accum[0], reg_alpha)
-            for i in range(1, 16):
-                mov(tmua, rf2, sig=thrsw).add(rf2, rf2, reg_c_stride)
-                fmul(reg_accum[i], reg_accum[i], reg_alpha, sig=ldtmu(rf1))
-                fmul(rf1, rf1, reg_beta)
-                fadd(reg_accum[i - 1], reg_accum[i - 1], rf1)
-            nop(sig=ldtmu(rf1))
-            fmul(rf1, rf1, reg_beta)
-            fadd(reg_accum[15], reg_accum[15], rf1)
+        def rotate_broadcast_reg_b() -> None:
+            r = rotate_broadcast_reg_b_order.popleft()
+            rotate(r, r, 1).mov(rep, r)
 
-            eidx(rf1)
-            shl(rf1, rf1, 2)
-            add(rf2, reg_c_cur, rf1)
-            for i in range(16):
-                mov(tmud, reg_accum[i]).mov(reg_accum[i], 0.0)
-                mov(tmua, rf2).add(rf2, rf2, reg_c_stride)
-                tmuwt()
+        # 16x4x16 FMA
+        rotate_broadcast_reg_b()
+        sub(reg_i, reg_i, 1, cond="pushz").fmul(rf1, rf0, reg_a[0])
+        for i in range(15):
+            rotate_broadcast_reg_b()
+            fadd(reg_accum[i], reg_accum[i], rf1).fmul(rf1, rf0, reg_a[0])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[15], reg_accum[15], rf1).fmul(rf1, rf0, reg_a[1])
+        for i in range(15):
+            rotate_broadcast_reg_b()
+            fadd(reg_accum[i], reg_accum[i], rf1).fmul(rf1, rf0, reg_a[1])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[15], reg_accum[15], rf1).fmul(rf1, rf0, reg_a[2])
+        for i in range(15):
+            rotate_broadcast_reg_b()
+            fadd(reg_accum[i], reg_accum[i], rf1).fmul(rf1, rf0, reg_a[2])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[15], reg_accum[15], rf1).fmul(rf1, rf0, reg_a[3])
+        for i in range(8):
+            rotate_broadcast_reg_b()
+            fadd(reg_accum[i], reg_accum[i], rf1).fmul(rf1, rf0, reg_a[3])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[8], reg_accum[8], rf1, sig=ldtmu(reg_a[0])).fmul(rf1, rf0, reg_a[3])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[9], reg_accum[9], rf1, sig=ldtmu(reg_a[1])).fmul(rf1, rf0, reg_a[3])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[10], reg_accum[10], rf1, sig=ldtmu(reg_a[2])).fmul(rf1, rf0, reg_a[3])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[11], reg_accum[11], rf1, sig=ldtmu(rf2)).fmul(rf1, rf0, reg_a[3])  # reg_a[3] is using
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[12], reg_accum[12], rf1, sig=ldtmu(reg_b[0])).fmul(rf1, rf0, reg_a[3])
+        rotate_broadcast_reg_b()
+        fadd(reg_accum[13], reg_accum[13], rf1, sig=ldtmu(reg_b[1])).fmul(rf1, rf0, reg_a[3])
+        lk.b(cond="anyna")
+        rotate_broadcast_reg_b()  # delay slot
+        fadd(reg_accum[14], reg_accum[14], rf1, sig=ldtmu(reg_b[2])).fmul(rf1, rf0, reg_a[3])  # delay slot
+        fadd(reg_accum[15], reg_accum[15], rf1, sig=ldtmu(reg_b[3])).mov(reg_a[3], rf2)  # delay slot
 
-            sub(reg_j, reg_j, 1, cond="pushz")
-            lj.b(cond="anyna")
-            nop()  # delay slot
-            nop()  # delay slot
-            nop()  # delay slot
+    # rf3-14 is released
+    del reg_a
+    del reg_b
+    del reg_i
+    del reg_a_base
+    del reg_b_stride_x4
+    del reg_b_base
 
-        sub(reg_i, reg_i, 1, cond="pushz")
-        li.b(cond="anyna")
-        nop()
-        nop()
-        nop()
-
-    barrierid(syncb, sig=thrsw)
-    nop()
-    nop()
+    # load C and store αAB+βC
+    reg_tmuc_vec_4_cfg = rf12
+    reg_alpha = rf13
+    reg_beta = rf14
+    bnot(reg_tmuc_vec_4_cfg, 3)  # pixel, regular, vec4
+    nop(sig=ldunifrf(reg_alpha))
+    mov(tmuc, reg_tmuc_vec_4_cfg, sig=ldunifrf(reg_beta)).fmul(reg_accum[0], reg_accum[0], reg_alpha)
+    mov(tmua, reg_c_base, sig=thrsw)
+    fmul(reg_accum[1], reg_accum[1], reg_alpha)
+    fmul(reg_accum[2], reg_accum[2], reg_alpha)
+    fmul(reg_accum[3], reg_accum[3], reg_alpha, sig=ldtmu(rf1))
+    mov(tmuc, reg_tmuc_vec_4_cfg).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[0], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[1], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[2], rf2).fmul(rf2, rf1, reg_beta)
+    fadd(tmud, reg_accum[3], rf2)
+    mov(tmua, reg_c_base).sub(reg_c_base, reg_c_base, -16)
+    mov(tmuc, reg_tmuc_vec_4_cfg).fmul(reg_accum[4], reg_accum[4], reg_alpha)
+    mov(tmua, reg_c_base, sig=thrsw)
+    fmul(reg_accum[5], reg_accum[5], reg_alpha)
+    fmul(reg_accum[6], reg_accum[6], reg_alpha)
+    fmul(reg_accum[7], reg_accum[7], reg_alpha, sig=ldtmu(rf1))
+    mov(tmuc, reg_tmuc_vec_4_cfg).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[4], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[5], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[6], rf2).fmul(rf2, rf1, reg_beta)
+    fadd(tmud, reg_accum[7], rf2)
+    mov(tmua, reg_c_base).sub(reg_c_base, reg_c_base, -16)
+    mov(tmuc, reg_tmuc_vec_4_cfg).fmul(reg_accum[8], reg_accum[8], reg_alpha)
+    mov(tmua, reg_c_base, sig=thrsw)
+    fmul(reg_accum[9], reg_accum[9], reg_alpha)
+    fmul(reg_accum[10], reg_accum[10], reg_alpha)
+    fmul(reg_accum[11], reg_accum[11], reg_alpha, sig=ldtmu(rf1))
+    mov(tmuc, reg_tmuc_vec_4_cfg).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[8], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[9], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[10], rf2).fmul(rf2, rf1, reg_beta)
+    fadd(tmud, reg_accum[11], rf2)
+    mov(tmua, reg_c_base).sub(reg_c_base, reg_c_base, -16)
+    mov(tmuc, reg_tmuc_vec_4_cfg).fmul(reg_accum[12], reg_accum[12], reg_alpha)
+    mov(tmua, reg_c_base, sig=thrsw)
+    fmul(reg_accum[13], reg_accum[13], reg_alpha)
+    fmul(reg_accum[14], reg_accum[14], reg_alpha)
+    fmul(reg_accum[15], reg_accum[15], reg_alpha, sig=ldtmu(rf1))
+    mov(tmuc, reg_tmuc_vec_4_cfg).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[12], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[13], rf2).fmul(rf2, rf1, reg_beta, sig=ldtmu(rf1))
+    fadd(tmud, reg_accum[14], rf2).fmul(rf2, rf1, reg_beta)
+    fadd(tmud, reg_accum[15], rf2)
+    mov(tmua, reg_c_base)
+    tmuwt()
 
     nop(sig=thrsw)
     nop(sig=thrsw)
@@ -257,18 +242,21 @@ def qpu_sgemm_rnn_naive(asm: Assembly, thread: int) -> None:
 
 
 def sgemm_rnn_naive() -> None:
-    thread = 12
-
-    p = 256 * 3
+    p = 1024
     q = 1024
-    r = 256 * 4
+    r = 1024
 
-    assert p % (16 * 3) == 0
+    assert p % 16 == 0
     assert q % 4 == 0
-    assert r % (16 * 4) == 0
+    assert r % 16 == 0
+
+    tile_p = p // 16
+    tile_r = r // 16
+
+    thread = tile_p * tile_r
 
     with Driver() as drv:
-        code = drv.program(qpu_sgemm_rnn_naive, thread)
+        code = drv.program(qpu_sgemm_rnn_naive)
 
         a: Array[np.float32] = drv.alloc((p, q), dtype=np.float32)
         b: Array[np.float32] = drv.alloc((q, r), dtype=np.float32)
@@ -290,37 +278,24 @@ def sgemm_rnn_naive() -> None:
         expected[:] = alpha * a_ref.dot(b_ref) + beta * c_ref
         time_ref = getsec() - start
 
-        def block_3x4_params(i: int, j: int) -> list[int]:
-            tile_p = p // 3
-            tile_r = r // 4
-            return [
-                tile_p,
-                q,
-                tile_r,
-                a.addresses()[tile_p * i, 0],
-                a.strides[0],
-                b.addresses()[0, tile_r * j],
-                b.strides[0],
-                c.addresses()[tile_p * i, tile_r * j],
-                c.strides[0],
-                np.float32(alpha).view(np.uint32).item(),
-                np.float32(beta).view(np.uint32).item(),
-            ]
-
-        unif_params: Array[np.uint32] = drv.alloc((thread, len(block_3x4_params(0, 0))), dtype=np.uint32)
-        for th in range(thread):
-            unif_params[th] = block_3x4_params(th // 4, th % 4)
-
-        unif: Array[np.uint32] = drv.alloc(2, dtype=np.uint32)
-        unif[0] = unif_params.addresses()[0, 0]
-        unif[1] = unif_params.shape[1]
+        unif: Array[np.uint32] = drv.alloc(10, dtype=np.uint32)
+        unif[0] = tile_r
+        unif[1] = a.strides[0]
+        unif[2] = a.addresses().item(0)
+        unif[3] = b.strides[0]
+        unif[4] = b.addresses().item(0)
+        unif[5] = c.strides[0]
+        unif[6] = c.addresses().item(0)
+        unif[7] = q
+        unif[8] = np.float32(alpha).view(np.uint32).item()
+        unif[9] = np.float32(beta).view(np.uint32).item()
 
         start = getsec()
-        drv.execute(code, unif.addresses()[0], thread=thread)
+        drv.execute(code, unif.addresses().item(0), workgroup=(1, 1, 16), wgs_per_sg=24, thread=thread)
         time_gpu = getsec() - start
 
         # np.set_printoptions(threshold=100000)
-        # print(c - expected)
+        # print(c)
 
         def gflops(sec: float) -> float:
             return (2 * p * q * r + 3 * p * r) / sec * 1e-9

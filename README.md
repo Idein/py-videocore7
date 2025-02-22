@@ -56,13 +56,13 @@ $ uv run pytest -vs tests
 
 ```console
 $ uv run examples/sgemm.py
-==== sgemm example (768x1024 times 1024x1024) ====
-numpy: 0.03077 sec, 52.41 Gflop/s
-QPU:   0.08141 sec, 19.81 Gflop/s
+==== sgemm example (1024x1024 times 1024x1024) ====
+numpy: 0.0390 sec, 55.1937 Gflop/s
+QPU:   0.1006 sec, 21.3827 Gflop/s
 Minimum absolute error: 0.0
-Maximum absolute error: 0.000396728515625
+Maximum absolute error: 0.0003814697265625
 Minimum relative error: 0.0
-Maximum relative error: 0.6591836810112
+Maximum relative error: 0.13134673237800598
 ```
 
 ```console
