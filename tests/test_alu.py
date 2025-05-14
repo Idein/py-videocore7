@@ -232,6 +232,198 @@ def boilerplate_binary_ops(
                 assert np.all(ops[dst_op](y[ix]) == ops[bin_op](ops[src1_op](x1), ops[src2_op](x2))), msg
 
 
+@qpu
+def qpu_binary_ops_with_smimm_a(
+    asm: Assembly,
+    explicit_dual_issue: bool,
+    bin_ops: list[str],
+    dst_ops: list[str | None],
+    smimms: list[int | float],
+    src_ops: list[str | None],
+) -> None:
+    eidx(rf10, sig=ldunifrf(rf0))
+    nop(sig=ldunifrf(rf2))
+    mov(rf13, 4)
+    shl(rf13, rf13, 4)
+
+    shl(rf10, rf10, 2)
+    add(rf0, rf0, rf10)
+    add(rf1, rf1, rf10)
+    add(rf2, rf2, rf10)
+
+    mov(tmua, rf0, sig=thrsw).add(rf0, rf0, rf13)
+    nop()
+    nop(sig=ldtmu(rf11))
+
+    g = globals()
+    for op, pack, smimm, unpack in itertools.product(bin_ops, dst_ops, smimms, src_ops):
+        if explicit_dual_issue:
+            f = nop().__getattribute__(op)
+        else:
+            f = g[op]
+        f(
+            rf10.pack(pack) if pack is not None else rf10,
+            smimm,
+            rf11.unpack(unpack) if unpack is not None else rf11,
+        )
+        mov(tmud, rf10)
+        mov(tmua, rf2)
+        tmuwt().add(rf2, rf2, rf13)
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+def boilerplate_binary_ops_with_smimm_a(
+    explicit_dual_issue: bool,
+    bin_ops: list[str],
+    dst: tuple[type, list[str | None]],
+    smimms: list[int | float],
+    src: tuple[type, list[str | None]],
+    domain: tuple[Any, Any] | None = None,
+) -> None:
+    dst_dtype, dst_ops = dst
+    src_dtype, src_ops = src
+
+    with Driver() as drv:
+        cases = list(itertools.product(bin_ops, dst_ops, smimms, src_ops))
+
+        code = drv.program(qpu_binary_ops_with_smimm_a, explicit_dual_issue, bin_ops, dst_ops, smimms, src_ops)
+        x: Array[Any] = drv.alloc((16 * 4 // np.dtype(src_dtype).itemsize,), dtype=src_dtype)
+        y: Array[Any] = drv.alloc((len(cases), 16 * 4 // np.dtype(dst_dtype).itemsize), dtype=dst_dtype)
+        unif: Array[np.uint32] = drv.alloc(3, dtype="uint32")
+
+        if domain is None:
+            if np.dtype(src_dtype).name.startswith("float"):
+                domain = (-(2**7), 2**7)
+            else:
+                info2 = np.iinfo(src_dtype)
+                domain = (info2.min, info2.max - int(not np.dtype(src_dtype).name.startswith("float")))
+
+        if domain[0] == domain[1]:
+            x[:] = domain[0]
+        elif domain[0] < domain[1]:
+            x[:] = np.random.uniform(domain[0], domain[1], x.shape).astype(src_dtype)
+        else:
+            raise ValueError("Invalid domain")
+
+        y[:] = 0.0
+
+        unif[0] = x.addresses()[0]
+        unif[1] = y.addresses()[0, 0]
+
+        drv.execute(code, unif.addresses()[0])
+
+        for ix, (bin_op, dst_op, smimm, src_op) in enumerate(cases):
+            msg = f"{bin_op}({dst_op}, {smimm}, {src_op})"
+            if np.dtype(dst_dtype).name.startswith("float"):
+                assert np.allclose(ops[dst_op](y[ix]), ops[bin_op](smimm, ops[src_op](x)), rtol=1e-2), msg
+            elif np.dtype(dst_dtype).name.startswith("int") or np.dtype(dst_dtype).name.startswith("uint"):
+                assert np.all(ops[dst_op](y[ix]) == ops[bin_op](smimm, ops[src_op](x))), msg
+
+
+@qpu
+def qpu_binary_ops_with_smimm_b(
+    asm: Assembly,
+    explicit_dual_issue: bool,
+    bin_ops: list[str],
+    dst_ops: list[str | None],
+    src_ops: list[str | None],
+    smimms: list[int | float],
+) -> None:
+    eidx(rf10, sig=ldunifrf(rf0))
+    nop(sig=ldunifrf(rf2))
+    mov(rf13, 4)
+    shl(rf13, rf13, 4)
+
+    shl(rf10, rf10, 2)
+    add(rf0, rf0, rf10)
+    add(rf1, rf1, rf10)
+    add(rf2, rf2, rf10)
+
+    mov(tmua, rf0, sig=thrsw).add(rf0, rf0, rf13)
+    nop()
+    nop(sig=ldtmu(rf11))
+
+    g = globals()
+    for op, pack, unpack, smimm in itertools.product(bin_ops, dst_ops, src_ops, smimms):
+        if explicit_dual_issue:
+            f = nop().__getattribute__(op)
+        else:
+            f = g[op]
+        f(
+            rf10.pack(pack) if pack is not None else rf10,
+            rf11.unpack(unpack) if unpack is not None else rf11,
+            smimm,
+        )
+        mov(tmud, rf10)
+        mov(tmua, rf2)
+        tmuwt().add(rf2, rf2, rf13)
+
+    nop(sig=thrsw)
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop(sig=thrsw)
+    nop()
+    nop()
+    nop()
+
+
+def boilerplate_binary_ops_with_smimm_b(
+    explicit_dual_issue: bool,
+    bin_ops: list[str],
+    dst: tuple[type, list[str | None]],
+    src: tuple[type, list[str | None]],
+    smimms: list[int | float],
+    domain: tuple[Any, Any] | None = None,
+) -> None:
+    dst_dtype, dst_ops = dst
+    src_dtype, src_ops = src
+
+    with Driver() as drv:
+        cases = list(itertools.product(bin_ops, dst_ops, src_ops, smimms))
+
+        code = drv.program(qpu_binary_ops_with_smimm_b, explicit_dual_issue, bin_ops, dst_ops, src_ops, smimms)
+        x: Array[Any] = drv.alloc((16 * 4 // np.dtype(src_dtype).itemsize,), dtype=src_dtype)
+        y: Array[Any] = drv.alloc((len(cases), 16 * 4 // np.dtype(dst_dtype).itemsize), dtype=dst_dtype)
+        unif: Array[np.uint32] = drv.alloc(3, dtype="uint32")
+
+        if domain is None:
+            if np.dtype(src_dtype).name.startswith("float"):
+                domain = (-(2**7), 2**7)
+            else:
+                info2 = np.iinfo(src_dtype)
+                domain = (info2.min, info2.max - int(not np.dtype(src_dtype).name.startswith("float")))
+
+        if domain[0] == domain[1]:
+            x[:] = domain[0]
+        elif domain[0] < domain[1]:
+            x[:] = np.random.uniform(domain[0], domain[1], x.shape).astype(src_dtype)
+        else:
+            raise ValueError("Invalid domain")
+
+        y[:] = 0.0
+
+        unif[0] = x.addresses()[0]
+        unif[1] = y.addresses()[0, 0]
+
+        drv.execute(code, unif.addresses()[0])
+
+        for ix, (bin_op, dst_op, src_op, smimm) in enumerate(cases):
+            msg = f"{bin_op}({dst_op}, {src_op}, {smimm})"
+            if np.dtype(dst_dtype).name.startswith("float"):
+                assert np.allclose(ops[dst_op](y[ix]), ops[bin_op](ops[src_op](x), smimm), rtol=1e-2), msg
+            elif np.dtype(dst_dtype).name.startswith("int") or np.dtype(dst_dtype).name.startswith("uint"):
+                assert np.all(ops[dst_op](y[ix]) == ops[bin_op](ops[src_op](x), smimm)), msg
+
+
 def test_binary_ops() -> None:
     packs: list[tuple[type, list[str | None]]] = [
         (np.float32, [None, "none"]),
@@ -248,6 +440,22 @@ def test_binary_ops() -> None:
             dst,
             src1,
             src2,
+        )
+    for dst, src2 in itertools.product(packs, unpacks):
+        boilerplate_binary_ops_with_smimm_a(
+            False,
+            ["fadd", "faddnf", "fsub", "fmin", "fmax"],
+            dst,
+            [0.0, 0.5, 1.0, 2.0],
+            src2,
+        )
+    for dst, src1 in itertools.product(packs, unpacks):
+        boilerplate_binary_ops_with_smimm_b(
+            False,
+            ["fadd", "faddnf", "fsub", "fmin", "fmax"],
+            dst,
+            src1,
+            [0.0, 0.5, 1.0, 2.0],
         )
     packs: list[tuple[type, list[str | None]]] = [
         (np.float32, [None, "none"]),

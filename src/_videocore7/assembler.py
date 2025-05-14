@@ -1237,9 +1237,9 @@ class ALUOp(ABC):
     def swap_signal(self: Self, sig1: Signal, sig2: Signal) -> None:
         sigs = Signals()
         for sig in self.sigs:
-            if sig == sig1:
+            if sig.name == sig1.name:
                 sigs.add(sig2)
-            elif sig == sig2:
+            elif sig.name == sig2.name:
                 sigs.add(sig1)
             else:
                 sigs.add(sig)
@@ -1261,6 +1261,16 @@ class AddALUOp(ALUOp):
     def pack(self: Self) -> int:
         op: int = self.op.opcode
         raddr_a = self.raddr_a.pack()
+
+        smimm_a = cast(Signal, Instruction.SIGNALS["smimm_a"])
+        smimm_b = cast(Signal, Instruction.SIGNALS["smimm_b"])
+        self.sigs.discard(smimm_a)
+        self.sigs.discard(smimm_b)
+        if self.raddr_a.has_smimm():
+            self.sigs.add(smimm_a)
+        if self.raddr_b.has_smimm():
+            self.sigs.add(smimm_b)
+
         match self.op.raddr_mask:
             case int() as raddr_mask:
                 if raddr_mask == 0:
@@ -1287,13 +1297,15 @@ class AddALUOp(ALUOp):
                 if b_unpack is None:
                     raise AssembleError(f'"{self.name}" requires src2 as register with modifier to f32')
 
-                ordering = a_unpack * 64 + raddr_a > b_unpack * 64 + raddr_b
+                operand_a = int(self.raddr_a.has_smimm()) * 256 + a_unpack * 64 + raddr_a
+                operand_b = int(self.raddr_b.has_smimm()) * 256 + b_unpack * 64 + raddr_b
+                ordering = operand_a > operand_b
                 if (self.name in ["fmin", "fadd"] and ordering) or (self.name in ["fmax", "faddnf"] and not ordering):
                     a_unpack, b_unpack = b_unpack, a_unpack
                     raddr_a, raddr_b = raddr_b, raddr_a
                     if isinstance(self.raddr_a._addr, int | float) or isinstance(self.raddr_b._addr, int | float):
                         assert self.raddr_a._addr != self.raddr_b._addr
-                        self.swap_signal(Signal("smimm_a"), Signal("smimm_b"))
+                        self.swap_signal(smimm_a, smimm_b)
 
                 op |= a_unpack << 2
                 op |= b_unpack << 0
@@ -1407,6 +1419,16 @@ class MulALUOp(ALUOp):
 
     def pack(self: Self) -> int:
         op = self.op.opcode
+
+        smimm_c = cast(Signal, Instruction.SIGNALS["smimm_c"])
+        smimm_d = cast(Signal, Instruction.SIGNALS["smimm_d"])
+        self.sigs.discard(smimm_c)
+        self.sigs.discard(smimm_d)
+        if self.raddr_a.has_smimm():
+            self.sigs.add(smimm_c)
+        if self.raddr_b.has_smimm():
+            self.sigs.add(smimm_d)
+
         raddr_c = self.raddr_a.pack()
         match self.op.raddr_mask:
             case int() as raddr_mask:
@@ -1517,26 +1539,25 @@ class ALU(Instruction):
             return self._pack_result
 
         add_op = self._add_op
+        add_op_packed = add_op.pack()
+
         mul_op = self._mul_op
         if mul_op is None:
             mul_op = MulALUOp("nop")
+        mul_op_packed = mul_op.pack()
+
+        # ATTENTION: {add,mul}_op.pack() changes {add,mul}_op.sigs.
+        # So it must be called before {add,mul}_op.sigs are referenced.
 
         sigs = Signals()
         sigs.add(add_op.sigs)
         sigs.add(mul_op.sigs)
-
-        if add_op.raddr_a.has_smimm():
-            sigs.add(Instruction.SIGNALS["smimm_a"])
-        if add_op.raddr_b.has_smimm():
-            sigs.add(Instruction.SIGNALS["smimm_b"])
-        if mul_op.raddr_a.has_smimm():
-            sigs.add(Instruction.SIGNALS["smimm_c"])
-        if mul_op.raddr_b.has_smimm():
-            sigs.add(Instruction.SIGNALS["smimm_d"])
+        sigs_packed = sigs.pack()
 
         cond = ALUConditions(add_op.cond, mul_op.cond)
+        cond_packed = cond.pack(sigs)
 
-        return 0 | sigs.pack() | cond.pack(sigs) | add_op.pack() | mul_op.pack()
+        return 0 | sigs_packed | cond_packed | add_op_packed | mul_op_packed
 
 
 class ALUWithoutSMIMM(ALU):
