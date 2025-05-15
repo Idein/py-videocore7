@@ -1539,11 +1539,30 @@ class ALU(Instruction):
             return self._pack_result
 
         add_op = self._add_op
-        add_op_packed = add_op.pack()
-
         mul_op = self._mul_op
         if mul_op is None:
             mul_op = MulALUOp("nop")
+
+        if add_op.op == AddALUOp.OPERATIONS["rotate"]:
+            if add_op.dst in [
+                Instruction.REGISTERS["rep"],
+                Instruction.REGISTERS["quad"],
+            ]:
+                raise AssembleError(f'"{add_op.name}({add_op.dst.name}, ...)" has no effect')
+            if add_op.dst in [
+                Instruction.REGISTERS["tmud"],
+                Instruction.REGISTERS["tmua"],
+                Instruction.REGISTERS["tmuc"],
+            ]:
+                raise AssembleError(f'"{add_op.name}({add_op.dst.name}, ...)" is dangerous')
+            if mul_op.dst in [
+                Instruction.REGISTERS["tmud"],
+                Instruction.REGISTERS["tmua"],
+                Instruction.REGISTERS["tmuc"],
+            ]:
+                raise AssembleError(f'"{add_op.name}(...).op({mul_op.dst.name}, ...)" is dangerous')
+
+        add_op_packed = add_op.pack()
         mul_op_packed = mul_op.pack()
 
         # ATTENTION: {add,mul}_op.pack() changes {add,mul}_op.sigs.

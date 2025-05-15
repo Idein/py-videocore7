@@ -4,6 +4,7 @@ from _videocore7.assembler import ALUConditionArg as ALUConditionArg
 from _videocore7.assembler import ALUConditionLiteral as ALUConditionLiteral
 from _videocore7.assembler import ALUWithoutSMIMM as ALUWithoutSMIMM
 from _videocore7.assembler import ALUWithSMIMM as ALUWithSMIMM
+from _videocore7.assembler import AssembleError as AssembleError
 from _videocore7.assembler import Assembly as Assembly
 from _videocore7.assembler import Branch as Branch
 from _videocore7.assembler import BranchConditionLiteral as BranchConditionLiteral
