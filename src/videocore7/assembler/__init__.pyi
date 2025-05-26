@@ -1007,3 +1007,6 @@ def fmul(dst: Register, src1: Register, src2: float, cond: ALUConditionArg = Non
 def fmul(
     dst: Register, src1: Register, src2: Register, cond: ALUConditionArg = None, sig: SignalArg = None
 ) -> None: ...
+
+# Extra instructions
+def raw(packed_code: int) -> None: ...
