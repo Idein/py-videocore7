@@ -6,5 +6,6 @@ from _videocore7.assembler import (
     Register,
     TMULookUpConfig,
     assemble,
+    get_label_positions,
     qpu,
 )
