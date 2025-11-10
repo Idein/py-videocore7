@@ -42,7 +42,7 @@ $ sudo apt upgrade
 $ sudo apt install git
 $ git clone https://github.com/Idein/py-videocore7.git
 $ cd py-videocore7/
-$ uv run example/sgemm.py
+$ uv run examples/sgemm.py
 ```
 
 
