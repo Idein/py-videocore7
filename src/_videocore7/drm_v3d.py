@@ -49,7 +49,7 @@ class DRM_V3D:  # noqa: N801
     def fd(self: Self) -> int | None:
         return self._fd
 
-    def __init__(self: Self, path: str = "/dev/dri/card0") -> None:
+    def __init__(self: Self, path: str = "/dev/dri/by-path/platform-1002000000.v3d-card") -> None:
         self._fd = os.open(path, os.O_RDWR)
 
     def close(self: Self) -> None:
