@@ -77,7 +77,7 @@ def test_cond_push_a() -> None:
 
         unif[0] = data.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         pushz_if_expected = np.zeros((16,), dtype=np.uint32)
         pushz_if_expected[10] = 1
@@ -154,7 +154,7 @@ def test_cond_push_b() -> None:
 
         unif[0] = data.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         push0 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 11, 12, 13, 14, 15]
         push1 = [0, 1, 2, 3, 4, 0, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
@@ -260,7 +260,7 @@ def test_cond_update() -> None:
 
         unif[0] = data.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         a = np.array([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]) > 0
         b = np.arange(16) - 5
@@ -357,7 +357,7 @@ def test_cond_combination() -> None:
 
         unif[0] = data.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         expected = np.array(
             [
@@ -437,7 +437,7 @@ def test_cond_vflx() -> None:
 
         unif[0] = data.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         for ix, op in enumerate(ops):
             assert np.all(data[ix] == expected(op))
@@ -505,7 +505,7 @@ def test_cond_flx() -> None:
         unif[1] = x2.addresses()[0]
         unif[2] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         expected = np.vstack(
             [

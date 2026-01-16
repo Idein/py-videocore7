@@ -222,7 +222,7 @@ def boilerplate_binary_ops(
         unif[1] = x2.addresses()[0]
         unif[2] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         for ix, (bin_op, dst_op, src1_op, src2_op) in enumerate(cases):
             msg = f"{bin_op}({dst_op}, {src1_op}, {src2_op})"
@@ -318,7 +318,7 @@ def boilerplate_binary_ops_with_smimm_a(
         unif[0] = x.addresses()[0]
         unif[1] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         for ix, (bin_op, dst_op, smimm, src_op) in enumerate(cases):
             msg = f"{bin_op}({dst_op}, {smimm}, {src_op})"
@@ -414,7 +414,7 @@ def boilerplate_binary_ops_with_smimm_b(
         unif[0] = x.addresses()[0]
         unif[1] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         for ix, (bin_op, dst_op, src_op, smimm) in enumerate(cases):
             msg = f"{bin_op}({dst_op}, {src_op}, {smimm})"
@@ -658,7 +658,7 @@ def boilerplate_unary_ops(
         unif[0] = x.addresses()[0]
         unif[1] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         for ix, (uni_op, dst_op, src_op) in enumerate(cases):
             msg = f"{uni_op}({dst_op}, {src_op})"

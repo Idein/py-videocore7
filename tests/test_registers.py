@@ -53,7 +53,7 @@ def test_regs_rep() -> None:
 
         unif[0] = dst.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(dst == unif[0])
 
@@ -86,6 +86,6 @@ def test_regis_quad() -> None:
 
         unif[0] = dst.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(dst == np.array([0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 12, 12, 12, 12]))

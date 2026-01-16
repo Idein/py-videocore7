@@ -74,7 +74,7 @@ def test_signal_ldtmu() -> None:
         unif[0] = x.addresses()[0]
         unif[1] = y.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(y[0] == x)
         assert np.all(y[1] == 2)

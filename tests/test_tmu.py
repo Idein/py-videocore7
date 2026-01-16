@@ -89,7 +89,7 @@ def test_tmu_single_write(n: int) -> None:
         unif[0] = n
         unif[1] = data.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(data == np.arange(n * 16).reshape(n, 16))
 
@@ -189,7 +189,7 @@ def test_tmu_multiple_interleaved_transform_write(
         unif[0] = data.addresses()[pad_u, pad_l]
         unif[1] = expected.shape[1]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(data == expected)
 
@@ -277,7 +277,7 @@ def test_tmu_multiple_write_with_uniform_config(
         unif[1] = expected.shape[1]
         unif[2] = TMULookUpConfig.sequential_read_write_vec(use_n_vec)
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(data == expected)
 
@@ -332,7 +332,7 @@ def test_tmu_single_read(n: int) -> None:
         unif[1] = data.addresses()[0, 0]
         unif[2] = data.addresses()[0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(data == base + 1)
 
@@ -444,7 +444,7 @@ def test_tmu_multiple_interleaved_transform_read(  # FIXME: This test make other
         unif[2] = source.shape[1]
         unif[3] = TMULookUpConfig.sequential_read_write_vec(use_n_vec)
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(dst == expected)
 
@@ -541,7 +541,7 @@ def test_tmu_multiple_read_with_uniform_config(
         unif[2] = source.shape[1]
         unif[3] = TMULookUpConfig.sequential_read_write_vec(use_n_vec)
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(dst == expected)
 
@@ -591,7 +591,7 @@ def test_tmu_keeps_memory_consistency() -> None:
         data[:] = 1
         unif[0] = data.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(data[0] == 3)
         assert np.all(data[1:] == 1)
@@ -647,7 +647,7 @@ def test_tmu_read_tmu_write_uniform_read() -> None:
         unif[0] = data.addresses()[0]
         unif[1] = result.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(data == 2)
         assert np.all(result == 2)  # !? not 3 ?
@@ -750,7 +750,7 @@ def test_tmu_op_write_add(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.i
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == initial + src1)
         assert np.all(actual[1] == initial)
@@ -788,7 +788,7 @@ def test_tmu_op_write_sub(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.i
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == initial - src1)
         assert np.all(actual[1] == initial)
@@ -826,7 +826,7 @@ def test_tmu_op_write_xchg(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == src1)
         assert np.all(actual[1] == initial)
@@ -932,7 +932,7 @@ def test_tmu_op_write_cmpxchg(
         unif[1] = a.addresses()[0]
         unif[2] = b.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == expect)
         assert np.all(actual[1] == initial)
@@ -970,7 +970,7 @@ def test_tmu_op_write_umin(initial: npt.NDArray[np.uint32], src1: npt.NDArray[np
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == np.minimum(initial, src1))
         assert np.all(actual[1] == initial)
@@ -1008,7 +1008,7 @@ def test_tmu_op_write_umax(initial: npt.NDArray[np.uint32], src1: npt.NDArray[np
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == np.maximum(initial, src1))
         assert np.all(actual[1] == initial)
@@ -1046,7 +1046,7 @@ def test_tmu_op_write_smin(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == np.minimum(initial, src1))
         assert np.all(actual[1] == initial)
@@ -1084,7 +1084,7 @@ def test_tmu_op_write_smax(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == np.maximum(initial, src1))
         assert np.all(actual[1] == initial)
@@ -1122,7 +1122,7 @@ def test_tmu_op_write_and(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.i
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == np.bitwise_and(initial, src1))
         assert np.all(actual[1] == initial)
@@ -1160,7 +1160,7 @@ def test_tmu_op_write_or(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.in
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == np.bitwise_or(initial, src1))
         assert np.all(actual[1] == initial)
@@ -1198,7 +1198,7 @@ def test_tmu_op_write_xor(initial: npt.NDArray[np.int32], src1: npt.NDArray[np.i
         unif[0] = actual.addresses()[0, 0]
         unif[1] = a.addresses()[0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         assert np.all(actual[0] == np.bitwise_xor(initial, src1))
         assert np.all(actual[1] == initial)
@@ -1326,7 +1326,7 @@ def case_tmu_4x16_strided_rectangular_read(height: int, width: int, upper_offset
         unif[1] = src.shape[1]
         unif[2] = dst.addresses().item(0)
 
-        drv.execute(code, unif.addresses().item(0))
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses().item(0))
 
         assert np.all(dst == src[upper_offset : upper_offset + 4, left_offset : left_offset + 16])
 

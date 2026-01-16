@@ -158,7 +158,7 @@ def test_unifa() -> None:
         unif[2] = src1.addresses()[0]
         unif[3] = dst.addresses()[0, 0, 0]
 
-        drv.execute(code, unif.addresses()[0])
+        drv.execute(code, local_invocation=(16, 1, 1), uniforms=unif.addresses()[0])
 
         # Case 1
         assert np.all(dst[0] == src0.reshape(n, 1))

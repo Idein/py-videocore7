@@ -18,6 +18,7 @@
 
 import mmap
 import sys
+import warnings
 from collections.abc import Callable
 from types import TracebackType
 from typing import IO, Any, Concatenate, Self
@@ -30,6 +31,20 @@ from _videocore7.drm_v3d import DRM_V3D
 
 DEFAULT_CODE_AREA_SIZE = 1024 * 1024
 DEFAULT_DATA_AREA_SIZE = 32 * 1024 * 1024
+
+
+def to_be_removed_local_invocation_defaulting(local_invocation: tuple[int, int, int] | None) -> tuple[int, int, int]:
+    if local_invocation is None:
+        warnings.warn(
+            (
+                "local_invocation is not specified; "
+                "using (16, 1, 1) as a fallback, "
+                "but correct behavior is not guaranteed."
+            ),
+            UserWarning,
+        )
+        return (16, 1, 1)
+    return local_invocation
 
 
 class DriverError(Exception):
@@ -135,6 +150,7 @@ class Dispatcher:
         self: Self,
         code: Array[np.uint64],
         uniforms: int | None = None,
+        local_invocation: tuple[int, int, int] | None = None,
         workgroup: tuple[int, int, int] = (16, 1, 1),
         wgs_per_sg: int = 16,
         thread: int = 1,
@@ -143,7 +159,8 @@ class Dispatcher:
         threading: bool = False,
     ) -> None:
         wg_x, wg_y, wg_z = workgroup
-        wg_size = wg_x * wg_y * wg_z
+        li_x, li_y, li_z = to_be_removed_local_invocation_defaulting(local_invocation)
+        wg_size = li_x * li_y * li_z
 
         def roundup(n: int, d: int) -> int:
             return (n + d - 1) // d
@@ -314,6 +331,7 @@ class Driver:
     def execute(
         self: Self,
         code: Array[np.uint64],
+        local_invocation: tuple[int, int, int] | None = None,
         uniforms: int | None = None,
         timeout_sec: int = 10,
         workgroup: tuple[int, int, int] = (16, 1, 1),
@@ -326,6 +344,7 @@ class Driver:
         with self.compute_shader_dispatcher(timeout_sec) as csd:
             csd.dispatch(
                 code,
+                local_invocation=to_be_removed_local_invocation_defaulting(local_invocation),
                 uniforms=uniforms,
                 workgroup=workgroup,
                 wgs_per_sg=wgs_per_sg,

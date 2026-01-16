@@ -184,7 +184,12 @@ def scopy(*, length: int, num_qpus: int = 12, unroll_shift: int = 0) -> None:
         print("Executing on QPU...")
 
         start = monotonic()
-        drv.execute(code, unif.addresses()[0], thread=num_qpus)
+        drv.execute(
+            code,
+            local_invocation=(16, 1, 1),
+            uniforms=unif.addresses()[0],
+            thread=num_qpus,
+        )
         end = monotonic()
 
         assert np.array_equal(x, y)

@@ -39,25 +39,9 @@ def qpu_sgemm_rnn_naive(asm: Assembly) -> None:
     # rf16 - rf31: 16x16 accumulators
     # rf32 - rf63: (unused)
 
+    # params
     reg_tile_i = rf1
     reg_tile_j = rf2
-
-    reg_wg_id = rf2.unpack("ul")  # if workgroup is (1, 1, 16), wg_id = wg_z_id
-    mov(rf2, reg_wg_id, sig=ldunif)  # load tile_r
-    itof(rf4, rf2)  # rf4 = float(wg_id)
-    itof(rf5, rf0)  # rf0 = float(tile_r)
-    recip(rf3, rf5)  # rf3 = 1 / float(tile_r)
-    fmul(rf1, rf4, rf3)  # rf1=  wg_id / tile_r
-    ffloor(rf1, rf1)  # rf1 = floor(wg_id / tile_r)
-    ftouz(reg_tile_i, rf1)  # rf1 = i (/ tile_p)
-    umul24(rf3, rf1, rf0)  # rf3 = i * tile_r
-    sub(reg_tile_j, rf2, rf3)  # rf2 = j (/ tile_r)
-
-    # params
-    # rf0: free
-    # rf1: reg_tile_i
-    # rf2: reg_tile_j
-    # rf3: free
     reg_a = [rf3, rf4, rf5, rf6]
     reg_b = [rf7, rf8, rf9, rf10]
     reg_i = rf11  # use after reg_c_stride is released
@@ -68,6 +52,9 @@ def qpu_sgemm_rnn_naive(asm: Assembly) -> None:
     reg_c_stride = rf10  # use for init, unused in loop
     reg_c_base = rf15
     reg_accum = [rf[i] for i in range(16, 32)]  # accumulators
+
+    mov(reg_tile_i, rf3.unpack("uh"))
+    mov(reg_tile_j, rf3.unpack("ul"))
 
     # a_base = a[i,:] = a_item0_addr + 16 * i * a_stride
     # b_base = b[:,j] = b_item0_addr + 16 * j * 4
@@ -253,8 +240,6 @@ def sgemm_rnn_naive() -> None:
     tile_p = p // 16
     tile_r = r // 16
 
-    thread = tile_p * tile_r
-
     with Driver() as drv:
         code = drv.program(qpu_sgemm_rnn_naive)
 
@@ -278,24 +263,27 @@ def sgemm_rnn_naive() -> None:
         expected[:] = alpha * a_ref.dot(b_ref) + beta * c_ref
         time_ref = getsec() - start
 
-        unif: Array[np.uint32] = drv.alloc(10, dtype=np.uint32)
-        unif[0] = tile_r
-        unif[1] = a.strides[0]
-        unif[2] = a.addresses().item(0)
-        unif[3] = b.strides[0]
-        unif[4] = b.addresses().item(0)
-        unif[5] = c.strides[0]
-        unif[6] = c.addresses().item(0)
-        unif[7] = q
-        unif[8] = np.float32(alpha).view(np.uint32).item()
-        unif[9] = np.float32(beta).view(np.uint32).item()
+        unif: Array[np.uint32] = drv.alloc(9, dtype=np.uint32)
+        unif[0] = a.strides[0]
+        unif[1] = a.addresses().item(0)
+        unif[2] = b.strides[0]
+        unif[3] = b.addresses().item(0)
+        unif[4] = c.strides[0]
+        unif[5] = c.addresses().item(0)
+        unif[6] = q
+        unif[7] = np.float32(alpha).view(np.uint32).item()
+        unif[8] = np.float32(beta).view(np.uint32).item()
 
         start = getsec()
-        drv.execute(code, unif.addresses().item(0), workgroup=(1, 1, 16), wgs_per_sg=24, thread=thread)
+        drv.execute(
+            code,
+            local_invocation=(16, 1, 1),
+            uniforms=unif.addresses().item(0),
+            workgroup=(tile_r, tile_p, 1),
+            wgs_per_sg=24,
+            thread=tile_p * tile_r,
+        )
         time_gpu = getsec() - start
-
-        # np.set_printoptions(threshold=100000)
-        # print(c)
 
         def gflops(sec: float) -> float:
             return (2 * p * q * r + 3 * p * r) / sec * 1e-9
