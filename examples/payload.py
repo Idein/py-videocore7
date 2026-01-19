@@ -107,14 +107,14 @@ def gpu_code(asm: Assembly) -> None:
     shl(rf0, rf0, 6)
 
     mov(tmud, reg_wg_x)
-    mov(tmua, reg_base, cond="ifa").add(reg_base, reg_base, rf0)
+    mov(tmua, reg_base).add(reg_base, reg_base, rf0)
     mov(tmud, reg_wg_y)
-    mov(tmua, reg_base, cond="ifa").add(reg_base, reg_base, rf0)
+    mov(tmua, reg_base).add(reg_base, reg_base, rf0)
     mov(tmud, reg_wg_z)
-    mov(tmua, reg_base, cond="ifa").add(reg_base, reg_base, rf0)
+    mov(tmua, reg_base).add(reg_base, reg_base, rf0)
     mov(rf1, reg_iid)
     shr(tmud, rf1, 17 - find_first_bit_u32(next_power_of_two_u32(max(local_x * local_y * local_z, 64))) - 1)
-    mov(tmua, reg_base, cond="ifa").add(reg_base, reg_base, rf0)
+    mov(tmua, reg_base).add(reg_base, reg_base, rf0)
 
     tmuwt()
 
